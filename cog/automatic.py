@@ -127,46 +127,54 @@ class Automatic(commands.Cog):
 				db.commit()
 
 	async def update_certificates(self):
-		await self.check_certificate()
+		domain_list = [
+			{
+				"domain": config.domain,
+				"zone_id": config.cloudflare_zone_id,
+				"cert_path": config.nginx_certificate_path
+			}
+		]
+		await self.check_certificate(domain_list=domain_list)
 		f = await self.check_ca()
-		await self.check_origin_tls_auth(force=f)
+		await self.check_origin_tls_auth(force=f, domain_list=domain_list)
 		await self.check_ragdoll(force=f)
 
-	async def check_certificate(self):
+	async def check_certificate(self, domain_list:list):
 		with sqlite3.connect(os.path.join(config.dir, 'database', 'certificate.db')) as db:
-			certificate_id, expire, fingerprint = db.execute('SELECT * FROM now').fetchone()
-			time_now = datetime.datetime.now().timestamp()
-			if expire - 2592000 < time_now:
-				logging.info("Starting update Origin CA Certificate...")
-				async with aiohttp.ClientSession() as s:
-					csr, private_key, public_key, new_fingerprint = certificate.generate_csr()
-					try:
-						raw_certificate = await certificate.sign_certificate(csr, s)
-						new_certificate_id = raw_certificate["result"]["id"]
-						new_certificate = raw_certificate["result"]["certificate"]
-						new_certificate_expire = int(datetime.datetime.strptime(raw_certificate["result"]["expires_on"].replace(" UTC", ""), "%Y-%m-%d %H:%M:%S %z").timestamp())
-					except:
-						logging.exception("Sign certificate with Cloudflare Origin CA Failed!!")
-						return
+			for domain_data in domain_list:
+				certificate_id, expire, fingerprint = db.execute('SELECT id, expire, fingerprint FROM now WHERE domain = ?',(domain_data["domain"],)).fetchone()
+				time_now = datetime.datetime.now().timestamp()
+				if expire - 2592000 < time_now:
+					logging.info(f"Starting update {domain_data["domain"]} Origin CA Certificate...")
+					async with aiohttp.ClientSession() as s:
+						csr, private_key, public_key, new_fingerprint = certificate.generate_csr()
+						try:
+							raw_certificate = await certificate.sign_certificate(csr, s, domain_data["domain"])
+							new_certificate_id = raw_certificate["result"]["id"]
+							new_certificate = raw_certificate["result"]["certificate"]
+							new_certificate_expire = int(datetime.datetime.strptime(raw_certificate["result"]["expires_on"].replace(" UTC", ""), "%Y-%m-%d %H:%M:%S %z").timestamp())
+						except:
+							logging.exception(f"Sign {domain_data["domain"]} certificate with Cloudflare Origin CA Failed!!")
+							return
 
-					try:
-						certificate.update_nginx(new_certificate, private_key)
-					except:
-						logging.exception("Update nginx certificate Failed!!")
-						return
+						try:
+							certificate.update_nginx(new_certificate, private_key, domain_data["cert_path"])
+						except:
+							logging.exception("Update nginx certificate Failed!!")
+							return
 
-					db.execute('INSERT INTO old VALUES (?, ?, ?)', (certificate_id, expire, fingerprint))
-					db.execute('DELETE FROM now')
-					db.execute('INSERT INTO now VALUES (?, ?, ?)', (new_certificate_id, new_certificate_expire, new_fingerprint))
-					db.commit()
+						db.execute('INSERT INTO old VALUES (?, ?, ?, ?)', (certificate_id, expire, fingerprint, domain_data["domain"]))
+						db.execute('DELETE FROM now WHERE domain = ?', (domain_data["domain"]))
+						db.execute('INSERT INTO now VALUES (?, ?, ?)', (new_certificate_id, new_certificate_expire, new_fingerprint, domain_data["domain"]))
+						db.commit()
 
-					try:
-						await certificate.revoke_certificate(certificate_id, s)
-					except:
-						logging.exception("Revoke certificate with Cloudflare Origin CA Failed!!")
-						return
+						try:
+							await certificate.revoke_certificate(certificate_id, s)
+						except:
+							logging.exception(f"Revoke {domain_data["domain"]} certificate with Cloudflare Origin CA Failed!!")
+							return
 
-					logging.info(f"Successfully update Origin CA Certificate\nID: {new_certificate_id}\nKey Fingerprint: {new_fingerprint}\nExpire: {datetime.datetime.fromtimestamp(new_certificate_expire, tz).strftime('%Y-%m-%d %H:%M:%S')}\nNext Update After: {datetime.datetime.fromtimestamp(new_certificate_expire - 2592000, tz).strftime('%Y-%m-%d %H:%M:%S')}")
+						logging.info(f"Successfully update {domain_data["domain"]} Origin CA Certificate\nID: {new_certificate_id}\nKey Fingerprint: {new_fingerprint}\nExpire: {datetime.datetime.fromtimestamp(new_certificate_expire, tz).strftime('%Y-%m-%d %H:%M:%S')}\nNext Update After: {datetime.datetime.fromtimestamp(new_certificate_expire - 2592000, tz).strftime('%Y-%m-%d %H:%M:%S')}")
 
 	async def check_ca(self) -> bool:
 		with sqlite3.connect(os.path.join(config.dir, 'database', 'certificate.db')) as db:
@@ -195,49 +203,60 @@ class Automatic(commands.Cog):
 			)
 			return True
 		
-	async def check_origin_tls_auth(self, force: bool = False):
+	async def check_origin_tls_auth(self, domain_list:list, force: bool = False):
 		with sqlite3.connect(os.path.join(config.dir, 'database', 'certificate.db')) as db:
-			cloudflare_id, certificate_id, expire, fingerprint = db.execute('SELECT * FROM cf_now').fetchone()
+			for domain_data in domain_list:
+				new_cert = False
 
-			if not force and expire - 2592000 > datetime.datetime.now().timestamp():
-				return
-
-			logging.info("Starting update Cloudflare Origin TLS Auth Certificate...")
-
-			certificate_pem, new_certificate_id, private_key, new_fingerprint, new_expire = certificate.generate_cloudflare_origin_tls_auth()
-
-			async with aiohttp.ClientSession() as s:
-				try:
-					result = await certificate.update_origin_tls_auth(certificate_pem, private_key, s)
-					new_cloudflare_id = result["result"]["id"]
-				except:
-					logging.exception("Update Cloudflare Origin TLS Auth Certificate Failed!!")
-					return
-				
-				while True:
-					result = await certificate.get_origin_tls_auth(new_cloudflare_id, s)
-					if result["result"]["status"] == "active":
-						break
-					await asyncio.sleep(1)
-
-				db.execute('INSERT INTO cf_old VALUES (?, ?, ?, ?)',(cloudflare_id, certificate_id, expire, fingerprint))
-				db.execute('DELETE FROM cf_now')
-				db.execute('INSERT INTO cf_now VALUES (?, ?, ?, ?)',(new_cloudflare_id, str(new_certificate_id), new_expire, new_fingerprint))
-				db.commit()
-
-				try:
-					await certificate.revoke_origin_tls_auth(cloudflare_id, s)
-				except:
-					logging.exception("Revoke Cloudflare Origin TLS Auth Certificate Failed!!")
+				cursor = db.execute('SELECT cf_id, id, expire, fingerprint FROM cf_now WHERE domain = ?', (domain_data["domain"],)).fetchone()
+				if cursor is None:
+					new_cert = True
+					force = True
+					cloudflare_id, certificate_id, expire, fingerprint = ("", "", 0, "")
+				else:
+					cloudflare_id, certificate_id, expire, fingerprint = cursor
+		
+				if not force and expire - 2592000 > datetime.datetime.now().timestamp():
 					return
 
-			logging.info(
-				f"Successfully update Cloudflare Origin TLS Auth Certificate\n"
-				f"Certificate ID: {new_certificate_id}\n"
-				f"Fingerprint: {new_fingerprint}\n"
-				f"Expire: {datetime.datetime.fromtimestamp(new_expire, tz).strftime('%Y-%m-%d %H:%M:%S')}\n"
-				f"Next Update After: {datetime.datetime.fromtimestamp(new_expire - 2592000, tz).strftime('%Y-%m-%d %H:%M:%S')}"
-			)
+				logging.info(f"Starting update {domain_data["domain"]} Cloudflare Origin TLS Auth Certificate...")
+
+				certificate_pem, new_certificate_id, private_key, new_fingerprint, new_expire = certificate.generate_cloudflare_origin_tls_auth()
+
+				async with aiohttp.ClientSession() as s:
+					try:
+						result = await certificate.update_origin_tls_auth(certificate_pem, private_key, s, domain_data["zone_id"])
+						new_cloudflare_id = result["result"]["id"]
+					except:
+						logging.exception(f"Update {domain_data["domain"]} Cloudflare Origin TLS Auth Certificate Failed!!")
+						return
+					
+					while True:
+						result = await certificate.get_origin_tls_auth(new_cloudflare_id, s, domain_data["zone_id"])
+						if result["result"]["status"] == "active":
+							break
+						await asyncio.sleep(1)
+
+					if not new_cert:
+						db.execute('INSERT INTO cf_old VALUES (?, ?, ?, ?, ?)',(cloudflare_id, certificate_id, expire, fingerprint, domain_data["domain"]))
+						db.execute('DELETE FROM cf_now WHERE domain = ?', (domain_data["domain"],))
+					db.execute('INSERT INTO cf_now VALUES (?, ?, ?, ?, )',(new_cloudflare_id, str(new_certificate_id), new_expire, new_fingerprint, domain_data["domain"]))
+					db.commit()
+
+					if not new_cert:
+						try:
+							await certificate.revoke_origin_tls_auth(cloudflare_id, s, domain_data["zone_id"])
+						except:
+							logging.exception(f"Revoke {domain_data["domain"]} Cloudflare Origin TLS Auth Certificate Failed!!")
+							return
+
+				logging.info(
+					f"Successfully update {domain_data["domain"]} Cloudflare Origin TLS Auth Certificate\n"
+					f"Certificate ID: {new_certificate_id}\n"
+					f"Fingerprint: {new_fingerprint}\n"
+					f"Expire: {datetime.datetime.fromtimestamp(new_expire, tz).strftime('%Y-%m-%d %H:%M:%S')}\n"
+					f"Next Update After: {datetime.datetime.fromtimestamp(new_expire - 2592000, tz).strftime('%Y-%m-%d %H:%M:%S')}"
+				)
 
 	async def check_ragdoll(self, force: bool = False):
 		with sqlite3.connect(os.path.join(config.dir, 'database', 'certificate.db')) as db:

@@ -165,7 +165,7 @@ def generate_leaf_certificate(common_name: str, eku):
 def generate_cloudflare_origin_tls_auth():
 	return generate_leaf_certificate(
 		"Cloudflare Origin TLS Auth",
-		x509.OID_CLIENT_AUTH
+		x509.OID_CLIENT_AUTH,
 	)
 
 def generate_ragdoll():
@@ -174,16 +174,16 @@ def generate_ragdoll():
 		x509.OID_SERVER_AUTH
 	)
 
-async def get_origin_tls_auth(cloudflare_id: str, s: aiohttp.ClientSession) -> dict:
+async def get_origin_tls_auth(cloudflare_id: str, s: aiohttp.ClientSession, zone_id:str) -> dict:
 	header = {
 		"Authorization": f"Bearer {config.cloudflare_origin_ca_key}",
 	}
 
-	async with s.get(f"https://api.cloudflare.com/client/v4/zones/{config.cloudflare_zone_id}/origin_tls_client_auth/{cloudflare_id}", headers=header) as r:
+	async with s.get(f"https://api.cloudflare.com/client/v4/zones/{zone_id}/origin_tls_client_auth/{cloudflare_id}", headers=header) as r:
 		r.raise_for_status()
 		return await r.json()
 
-async def update_origin_tls_auth(certificate: str, private_key: str, s: aiohttp.ClientSession):
+async def update_origin_tls_auth(certificate: str, private_key: str, s: aiohttp.ClientSession, zone_id:str):
 	header = {
 		"Authorization": f"Bearer {config.cloudflare_origin_ca_key}",
 		"Content-Type": "application/json"
@@ -195,16 +195,16 @@ async def update_origin_tls_auth(certificate: str, private_key: str, s: aiohttp.
 	}
 
 	async with s.post(
-		f"https://api.cloudflare.com/client/v4/zones/{config.cloudflare_zone_id}/origin_tls_client_auth",data=json.dumps(data), headers=header) as r:
+		f"https://api.cloudflare.com/client/v4/zones/{zone_id}/origin_tls_client_auth",data=json.dumps(data), headers=header) as r:
 		r.raise_for_status()
 		return await r.json()
 
-async def revoke_origin_tls_auth(cloudflare_id: str, s: aiohttp.ClientSession):
+async def revoke_origin_tls_auth(cloudflare_id: str, s: aiohttp.ClientSession, zone_id:str):
 	header = {
 		"Authorization": f"Bearer {config.cloudflare_origin_ca_key}",
 	}
 
-	async with s.delete(f"https://api.cloudflare.com/client/v4/zones/{config.cloudflare_zone_id}/origin_tls_client_auth/{cloudflare_id}", headers=header) as r:
+	async with s.delete(f"https://api.cloudflare.com/client/v4/zones/{zone_id}/origin_tls_client_auth/{cloudflare_id}", headers=header) as r:
 		r.raise_for_status()
 
 def update_ragdoll(certificate: str, private_key: str):
@@ -226,9 +226,8 @@ def generate_csr():
 	key = ec.generate_private_key(ec.SECP256R1(), default_backend())
 
 	csr = x509.CertificateSigningRequestBuilder().subject_name(x509.Name([
-		x509.NameAttribute(NameOID.COUNTRY_NAME, u"TW"),
-		x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, u"Taipei"),
-		x509.NameAttribute(NameOID.COMMON_NAME, u"modbot.dev")
+		x509.NameAttribute(NameOID.COUNTRY_NAME, u"JP"),
+		x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, u"Tokyo")
 	])).sign(key, hashes.SHA256(), default_backend())
 
 	private_key = key.private_bytes(serialization.Encoding.PEM,serialization.PrivateFormat.PKCS8,serialization.NoEncryption())
@@ -243,14 +242,14 @@ def generate_csr():
 
 	return csr_pem.decode(), private_key.decode(), public_key.decode(), fingerprint.hex()
 
-async def sign_certificate(csr:str, s:aiohttp.ClientSession) -> dict:
+async def sign_certificate(csr:str, s:aiohttp.ClientSession, domain:str) -> dict:
 	header = {
 		"Authorization": f"Bearer {config.cloudflare_origin_ca_key}",
 		"Content-Type": "application/json"
 	}
 	data = {
 		"csr": csr,
-		"hostnames": [config.domain, f"*.{config.domain}"],
+		"hostnames": [domain, f"*.{domain}"],
 		"requested_validity": 90,
 		"request_type": "origin-ecc"
 	}
@@ -265,10 +264,10 @@ async def revoke_certificate(id:str, s:aiohttp.ClientSession) -> None:
 	async with s.delete(f"https://api.cloudflare.com/client/v4/certificates/{id}", headers=header) as r:
 		r.raise_for_status()
 
-def update_nginx(certificate:str, private_key:str):
-	with open(os.path.join(config.nginx_certificate_path, "chain.pem"), "w") as f:
+def update_nginx(certificate:str, private_key:str, cert_path:str):
+	with open(os.path.join(cert_path, "chain.pem"), "w") as f:
 		f.write(certificate)
-	with open(os.path.join(config.nginx_certificate_path, "key.pem"), "w") as f:
+	with open(os.path.join(cert_path, "key.pem"), "w") as f:
 		f.write(private_key)
 	subprocess.run("sudo nginx -t", shell=True, check=True, text=True)
 	subprocess.run("sudo nginx -s reload", shell=True, check=True, text=True)
