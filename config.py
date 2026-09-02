@@ -127,7 +127,7 @@ secret = os.environ["WEB_SECRET"]
 
 web_secret = os.environ["WEB_TOKEN"]
 
-domain = os.environ["MODBOT_DOMAIN"]
+domain = "modbot.dev"
 
 yuki_domain = domain = os.environ["YUKI_DOMAIN"]
 
