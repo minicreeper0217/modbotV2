@@ -132,6 +132,11 @@ class Automatic(commands.Cog):
 				"domain": config.domain,
 				"zone_id": config.cloudflare_zone_id,
 				"cert_path": config.nginx_certificate_path
+			},
+			{
+				"domain": config.yuki_domain,
+				"zone_id": config.cloudflare_yuki_zone_id,
+				"cert_path": config.nginx_yuki_certificate_path
 			}
 		]
 		await self.check_certificate(domain_list=domain_list)

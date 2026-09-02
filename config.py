@@ -87,6 +87,8 @@ cloudflare_origin_ca_key = os.environ["CF_ORIGIN_CA_KEY"]
 
 cloudflare_zone_id = os.environ["CF_ZONE_ID"]
 
+cloudflare_yuki_zone_id = os.environ["CF_YUKI_ZONE_ID"]
+
 cloudflare_turnstile_key = os.environ["CF_TURNSTILE_KEY"]
 
 porkbun_api_key = os.environ["PORKBUN_API_KEY"]
@@ -111,6 +113,8 @@ mail_recv_address = os.environ["MAIL_RECV_ADDRESS"]
 
 nginx_certificate_path = os.environ["NGINX_CERT_PATH"]
 
+nginx_yuki_certificate_path = os.environ["NGINX_YUKI_CERT_PATH"]
+
 bluesky_bot_pds = os.environ["BLUESKY_BOT_PDS"]
 
 bluesky_admin_pds = os.environ["BLUESKY_ADMIN_PDS"]
@@ -124,6 +128,8 @@ secret = os.environ["WEB_SECRET"]
 web_secret = os.environ["WEB_TOKEN"]
 
 domain = os.environ["DOMAIN"]
+
+yuki_domain = domain = os.environ["YUKI_DOMAIN"]
 
 onion_domain = os.environ["ONION_DOMAIN"]
 
