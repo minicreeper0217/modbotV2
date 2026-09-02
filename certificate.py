@@ -257,6 +257,7 @@ async def sign_certificate(csr:str, s:aiohttp.ClientSession, domain:str) -> dict
 	}
 	logging.info(json.dumps(data, indent=2))
 	async with s.post("https://api.cloudflare.com/client/v4/certificates", data=json.dumps(data), headers=header) as r:
+		logging.info(await r.text())
 		r.raise_for_status()
 		return await r.json()
 
