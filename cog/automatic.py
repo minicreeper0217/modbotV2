@@ -29,7 +29,7 @@ class Automatic(commands.Cog):
 	async def start(self):
 		await self.bot.wait_until_ready()
 		schedule.every(1).day.at("02:00", tz=tz).do(lambda: asyncio.create_task(self.check_log())).tag("automatic")
-		schedule.every(1).day.at("05:45", tz=tz).do(lambda: asyncio.create_task(self.update_certificates())).tag("automatic")
+		schedule.every(1).day.at("06:00", tz=tz).do(lambda: asyncio.create_task(self.update_certificates())).tag("automatic")
 		schedule.every(1).day.at("06:00", tz=tz).do(lambda: asyncio.create_task(self.check_ytsubscribe())).tag("automatic")
 		schedule.every(1).day.at("08:00", tz=tz).do(lambda: asyncio.create_task(self.cat())).tag("automatic")
 		schedule.every(1).day.at("14:00", tz=tz).do(lambda: asyncio.create_task(self.check_ytsubscribe())).tag("automatic")
@@ -216,12 +216,11 @@ class Automatic(commands.Cog):
 				cursor = db.execute('SELECT cf_id, id, expire, fingerprint FROM cf_now WHERE domain = ?', (domain_data["domain"],)).fetchone()
 				if cursor is None:
 					new_cert = True
-					force = True
 					cloudflare_id, certificate_id, expire, fingerprint = ("", "", 0, "")
 				else:
 					cloudflare_id, certificate_id, expire, fingerprint = cursor
 		
-				if not force and expire - 2592000 > datetime.datetime.now().timestamp():
+				if not new_cert and not force and expire - 2592000 > datetime.datetime.now().timestamp():
 					return
 
 				logging.info(f"Starting update {domain_data["domain"]} Cloudflare Origin TLS Auth Certificate...")
