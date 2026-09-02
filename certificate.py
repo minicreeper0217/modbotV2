@@ -227,7 +227,8 @@ def generate_csr():
 
 	csr = x509.CertificateSigningRequestBuilder().subject_name(x509.Name([
 		x509.NameAttribute(NameOID.COUNTRY_NAME, u"JP"),
-		x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, u"Tokyo")
+		x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, u"Tokyo"),
+		x509.NameAttribute(NameOID.COMMON_NAME, "Origin Certificate"),
 	])).sign(key, hashes.SHA256(), default_backend())
 
 	private_key = key.private_bytes(serialization.Encoding.PEM,serialization.PrivateFormat.PKCS8,serialization.NoEncryption())

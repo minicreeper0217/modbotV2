@@ -29,7 +29,7 @@ class Automatic(commands.Cog):
 	async def start(self):
 		await self.bot.wait_until_ready()
 		schedule.every(1).day.at("02:00", tz=tz).do(lambda: asyncio.create_task(self.check_log())).tag("automatic")
-		schedule.every(1).day.at("05:35", tz=tz).do(lambda: asyncio.create_task(self.update_certificates())).tag("automatic")
+		schedule.every(1).day.at("05:45", tz=tz).do(lambda: asyncio.create_task(self.update_certificates())).tag("automatic")
 		schedule.every(1).day.at("06:00", tz=tz).do(lambda: asyncio.create_task(self.check_ytsubscribe())).tag("automatic")
 		schedule.every(1).day.at("08:00", tz=tz).do(lambda: asyncio.create_task(self.cat())).tag("automatic")
 		schedule.every(1).day.at("14:00", tz=tz).do(lambda: asyncio.create_task(self.check_ytsubscribe())).tag("automatic")
@@ -245,7 +245,7 @@ class Automatic(commands.Cog):
 					if not new_cert:
 						db.execute('INSERT INTO cf_old VALUES (?, ?, ?, ?, ?)',(cloudflare_id, certificate_id, expire, fingerprint, domain_data["domain"]))
 						db.execute('DELETE FROM cf_now WHERE domain = ?', (domain_data["domain"],))
-					db.execute('INSERT INTO cf_now VALUES (?, ?, ?, ?, )',(new_cloudflare_id, str(new_certificate_id), new_expire, new_fingerprint, domain_data["domain"]))
+					db.execute('INSERT INTO cf_now VALUES (?, ?, ?, ?, ?)',(new_cloudflare_id, str(new_certificate_id), new_expire, new_fingerprint, domain_data["domain"]))
 					db.commit()
 
 					if not new_cert:
