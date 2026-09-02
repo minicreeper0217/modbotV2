@@ -29,7 +29,7 @@ class Automatic(commands.Cog):
 	async def start(self):
 		await self.bot.wait_until_ready()
 		schedule.every(1).day.at("02:00", tz=tz).do(lambda: asyncio.create_task(self.check_log())).tag("automatic")
-		schedule.every(1).day.at("06:38", tz=tz).do(lambda: asyncio.create_task(self.update_certificates())).tag("automatic")
+		schedule.every(1).day.at("06:44", tz=tz).do(lambda: asyncio.create_task(self.update_certificates())).tag("automatic")
 		schedule.every(1).day.at("06:00", tz=tz).do(lambda: asyncio.create_task(self.check_ytsubscribe())).tag("automatic")
 		schedule.every(1).day.at("08:00", tz=tz).do(lambda: asyncio.create_task(self.cat())).tag("automatic")
 		schedule.every(1).day.at("14:00", tz=tz).do(lambda: asyncio.create_task(self.check_ytsubscribe())).tag("automatic")
@@ -147,6 +147,13 @@ class Automatic(commands.Cog):
 
 	async def check_certificate(self, domain_list:list):
 		with sqlite3.connect(os.path.join(config.dir, 'database', 'certificate.db')) as db:
+			logging.warning(
+    		"CONFIG: domain=%r zone=%r | yuki_domain=%r yuki_zone=%r",
+    		config.domain,
+    		config.cloudflare_zone_id,
+    		config.yuki_domain,
+    		config.cloudflare_yuki_zone_id
+			)
 			for domain_data in domain_list:
 				certificate_id, expire, fingerprint = db.execute('SELECT id, expire, fingerprint FROM now WHERE domain = ?',(domain_data["domain"],)).fetchone()
 				time_now = datetime.datetime.now().timestamp()
