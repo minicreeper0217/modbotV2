@@ -29,7 +29,7 @@ class Automatic(commands.Cog):
 	async def start(self):
 		await self.bot.wait_until_ready()
 		schedule.every(1).day.at("02:00", tz=tz).do(lambda: asyncio.create_task(self.check_log())).tag("automatic")
-		schedule.every(1).day.at("06:22", tz=tz).do(lambda: asyncio.create_task(self.update_certificates())).tag("automatic")
+		schedule.every(1).day.at("06:30", tz=tz).do(lambda: asyncio.create_task(self.update_certificates())).tag("automatic")
 		schedule.every(1).day.at("06:00", tz=tz).do(lambda: asyncio.create_task(self.check_ytsubscribe())).tag("automatic")
 		schedule.every(1).day.at("08:00", tz=tz).do(lambda: asyncio.create_task(self.cat())).tag("automatic")
 		schedule.every(1).day.at("14:00", tz=tz).do(lambda: asyncio.create_task(self.check_ytsubscribe())).tag("automatic")
@@ -139,6 +139,7 @@ class Automatic(commands.Cog):
 				"cert_path": config.nginx_yuki_certificate_path
 			}
 		]
+		logging.info(json.dumps(domain_list))
 		await self.check_certificate(domain_list=domain_list)
 		f = await self.check_ca()
 		await self.check_origin_tls_auth(force=f, domain_list=domain_list)
@@ -170,7 +171,7 @@ class Automatic(commands.Cog):
 							return
 
 						db.execute('INSERT INTO old VALUES (?, ?, ?, ?)', (certificate_id, expire, fingerprint, domain_data["domain"]))
-						db.execute('DELETE FROM now WHERE domain = ?', (domain_data["domain"]))
+						db.execute('DELETE FROM now WHERE domain = ?', (domain_data["domain"],))
 						db.execute('INSERT INTO now VALUES (?, ?, ?)', (new_certificate_id, new_certificate_expire, new_fingerprint, domain_data["domain"]))
 						db.commit()
 

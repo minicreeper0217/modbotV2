@@ -251,7 +251,7 @@ async def sign_certificate(csr:str, s:aiohttp.ClientSession, domain:str) -> dict
 	}
 	data = {
 		"csr": csr,
-		"hostnames": [domain, f"*.{domain}"],
+		"hostnames": [config.domain, config.yuki_domain],
 		"requested_validity": 90,
 		"request_type": "origin-ecc"
 	}
