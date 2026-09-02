@@ -88,6 +88,8 @@ class GPTres():
 		}
 		async with aiohttp.ClientSession() as s:
 			async with s.post("https://api.openai.com/v1/moderations", data=json.dumps(data), headers=headers) as r:
+				if r.status == 429:
+					return ""
 				r.raise_for_status()
 				mod = await r.json()
 				modfoo = ""
