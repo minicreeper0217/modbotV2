@@ -29,7 +29,7 @@ class Automatic(commands.Cog):
 	async def start(self):
 		await self.bot.wait_until_ready()
 		schedule.every(1).day.at("02:00", tz=tz).do(lambda: asyncio.create_task(self.check_log())).tag("automatic")
-		schedule.every(1).day.at("06:59", tz=tz).do(lambda: asyncio.create_task(self.update_certificates())).tag("automatic")
+		schedule.every(1).day.at("07:03", tz=tz).do(lambda: asyncio.create_task(self.update_certificates())).tag("automatic")
 		schedule.every(1).day.at("06:00", tz=tz).do(lambda: asyncio.create_task(self.check_ytsubscribe())).tag("automatic")
 		schedule.every(1).day.at("08:00", tz=tz).do(lambda: asyncio.create_task(self.cat())).tag("automatic")
 		schedule.every(1).day.at("14:00", tz=tz).do(lambda: asyncio.create_task(self.check_ytsubscribe())).tag("automatic")
