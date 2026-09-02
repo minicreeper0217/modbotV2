@@ -139,7 +139,6 @@ class Automatic(commands.Cog):
 				"cert_path": config.nginx_yuki_certificate_path
 			}
 		]
-		logging.info(json.dumps(domain_list))
 		await self.check_certificate(domain_list=domain_list)
 		f = await self.check_ca()
 		await self.check_origin_tls_auth(force=f, domain_list=domain_list)
@@ -147,13 +146,6 @@ class Automatic(commands.Cog):
 
 	async def check_certificate(self, domain_list:list):
 		with sqlite3.connect(os.path.join(config.dir, 'database', 'certificate.db')) as db:
-			logging.warning(
-    		"CONFIG: domain=%r zone=%r | yuki_domain=%r yuki_zone=%r",
-    		config.domain,
-    		config.cloudflare_zone_id,
-    		config.yuki_domain,
-    		config.cloudflare_yuki_zone_id
-			)
 			for domain_data in domain_list:
 				certificate_id, expire, fingerprint = db.execute('SELECT id, expire, fingerprint FROM now WHERE domain = ?',(domain_data["domain"],)).fetchone()
 				time_now = datetime.datetime.now().timestamp()

@@ -10,7 +10,6 @@ import json
 import config
 import os
 import pytz
-import logging
 
 tz = pytz.utc
 
@@ -255,9 +254,7 @@ async def sign_certificate(csr:str, s:aiohttp.ClientSession, domain:str) -> dict
 		"requested_validity": 90,
 		"request_type": "origin-ecc"
 	}
-	logging.info(json.dumps(data, indent=2))
 	async with s.post("https://api.cloudflare.com/client/v4/certificates", data=json.dumps(data), headers=header) as r:
-		logging.info(await r.text())
 		r.raise_for_status()
 		return await r.json()
 
