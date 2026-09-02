@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}
+Session 已撤銷 | modbot
+{% endblock %}
+
+{% block head %}
+<style>
+  .security-card {
+    width: 100%;
+    background-color: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 30px;
+    box-sizing: border-box;
+  }
+
+  .security-card h1 {
+    margin: 0 0 12px;
+    font-size: 32px;
+  }
+
+  .description {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 17px;
+    line-height: 1.6;
+  }
+
+  .session-label {
+    margin-top: 30px;
+    margin-bottom: 8px;
+    color: var(--text-secondary);
+    font-size: 14px;
+  }
+
+  .session-id {
+    padding: 14px;
+    background-color: var(--menu);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+
+    color: var(--text);
+
+    font-family: monospace;
+    font-size: 15px;
+    line-height: 1.5;
+
+    overflow-wrap: anywhere;
+    box-sizing: border-box;
+  }
+
+  .notice {
+    margin: 24px 0 0;
+
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  h2 {
+    margin-top: 0px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="security-card">
+
+  <h2>
+    ✓ Session 已撤銷
+  </h2>
+
+  <p class="description">
+    該登入 session 已被撤銷，之後將無法再使用此 session token。
+  </p>
+
+  <div class="session-label">
+    Session ID
+  </div>
+
+  <div class="session-id">
+    {{ session_id }}
+  </div>
+
+  <p class="notice">
+    如果這不是你的操作，建議立即檢查帳號安全性。
+  </p>
+
+</div>
+{% endblock %}

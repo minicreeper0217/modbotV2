@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<title>Misskey Statistics | modbot.dev</title>
+		<link rel="apple-touch-icon" sizes="120x120" href="/favicon/apple-touch-icon.png">
+		<link rel="icon" type="image/x-icon" href="/favicon/favicon.ico">
+		<link rel="icon" type="image/png" sizes="32x32" href="/favicon/favicon-32x32.png">
+		<link rel="icon" type="image/png" sizes="16x16" href="/favicon/favicon-16x16.png">
+		<style>
+			body {
+				background-color: #f0f0f0;
+				margin-top: 20px;
+				font-family: 'Microsoft JhengHei', sans-serif;
+				color: black;
+			}
+			table {
+				border-collapse: collapse;
+				table-layout: auto;
+				width: auto;
+				white-space: pre;
+				word-wrap: break-word;
+				margin: 0 auto;
+				font-size: 23px;
+			}
+			th, td {
+				border: 1px solid black;
+				padding: 8px;
+				word-wrap: break-word;
+				text-align: center;
+				vertical-align: middle;
+			}
+			.table-container {
+				width: 100%;
+				overflow-x: auto;
+			}
+			.total-row td {
+				background-color: #a8ff9d;
+				color: black;
+			}
+			.logo {
+				position: absolute;
+				top: 10px;
+				left: 10px;
+				font-weight: bold;
+				margin-top: 20px;
+				margin-left: 25px;
+				font-size: 22px;
+				text-decoration: none;
+				color: #000;
+			}
+			@media (prefers-color-scheme: dark) {
+				body {
+					background-color: #1f1f1f;
+					color: white;
+				}
+				.total-row td {
+				background-color: #405F3B;
+				color: white;
+				}
+				.logo {
+					color: white;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<a class="logo" href="/">modbot.dev</a>
+		<div style="height: 30px">
+			<h1 style="justify-content: center; display: flex; margin-top: 55px">Misskey Statistics</h1>
+			<table>
+				<tr>
+					<th>NO.</th>
+					<th>用戶名稱</th>
+					<th>次數</th>
+					<th>百分比</th>
+				</tr>
+			</table>
+		</div>
+		<script>
+			fetch('/api/log/misskey')
+				.then(response => {
+					if (response.status === 401) {
+						window.location.href = '/main';
+					}
+					return response.json();
+				})
+				.then(data => {
+					const table = document.querySelector('table');
+					let total = 0;
+
+					const dataArray = Object.keys(data).map(key => ({
+						name: data[key].name,
+						times: data[key].times
+					}));
+
+					dataArray.sort((a, b) => b.times - a.times);
+
+					dataArray.forEach((item, index) => {
+						const row = document.createElement('tr');
+						const numberCell = document.createElement('td');
+						numberCell.appendChild(document.createTextNode(index + 1));
+						row.appendChild(numberCell);
+
+						const nameCell = document.createElement('td');
+						nameCell.appendChild(document.createTextNode(item.name));
+						row.appendChild(nameCell);
+
+						const timesCell = document.createElement('td');
+						timesCell.appendChild(document.createTextNode(item.times));
+						row.appendChild(timesCell);
+
+						const percentageCell = document.createElement('td');
+						if(index !== dataArray.length) {
+							const times = parseInt(item.times, 10);
+							total += times;
+						}
+						percentageCell.appendChild(document.createTextNode(''));
+						row.appendChild(percentageCell);
+
+						table.appendChild(row);
+					});
+
+					const totalRow = document.createElement('tr');
+					const totalCell = document.createElement('td');
+					totalRow.classList.add('total-row');
+					totalCell.colSpan = 2;
+					totalCell.appendChild(document.createTextNode('Total'));
+					const totalTimesCell = document.createElement('td');
+					totalTimesCell.appendChild(document.createTextNode(total));
+					const totalPercentageCell = document.createElement('td');
+					totalPercentageCell.appendChild(document.createTextNode('100%'));
+
+					totalRow.appendChild(totalCell);
+					totalRow.appendChild(totalTimesCell);
+					totalRow.appendChild(totalPercentageCell);
+					table.appendChild(totalRow);
+
+					const rows = table.querySelectorAll('tr');
+					rows.forEach((row, index) => {
+						const percentageCell = row.querySelector('td:nth-child(4)');
+						if (percentageCell) {
+							if (index !== rows.length - 1) {
+								const timesCell = row.querySelector('td:nth-child(3)');
+								const times = parseInt(timesCell.textContent, 10);
+								const percentage = (times / total * 100).toFixed(3) + '%';
+								percentageCell.textContent = percentage;
+							}
+						}
+					});
+
+					const emptyRow = document.createElement('tr');
+					const emptyCell = document.createElement('td');
+					emptyCell.colSpan = 4;
+					emptyCell.style.border = 'none';
+					emptyCell.style.height = '20px';
+					emptyRow.appendChild(emptyCell);
+					table.appendChild(emptyRow);
+				})
+				.catch(error => console.error('Error fetching log:', error));
+		</script>
+	</body>
+</html>

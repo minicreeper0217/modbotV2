@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=0.5">
+	<title>Subscription List | modbot</title>
+	<link rel="apple-touch-icon" sizes="120x120" href="/favicon/apple-touch-icon.png">
+	<link rel="icon" type="image/x-icon" href="/favicon/favicon.ico">
+	<link rel="icon" type="image/png" sizes="32x32" href="/favicon/favicon-32x32.png">
+	<link rel="icon" type="image/png" sizes="16x16" href="/favicon/favicon-16x16.png">
+	<style>
+		body {
+			background-color: #f0f0f0;
+			margin-top: 20px;
+			font-family: 'Microsoft JhengHei', sans-serif;
+			color: black;
+		}
+		table {
+			border-collapse: collapse;
+			table-layout: auto;
+			width: auto;
+			white-space: pre;
+			word-wrap: break-word;
+			margin: 0 auto;
+			font-size: 23px;
+		}
+		th, td {
+			border: 1px solid black;
+			padding: 8px;
+			word-wrap: break-word;
+			text-align: center;
+			vertical-align: middle;
+		}
+		.table-container {
+			width: 100%;
+			overflow-x: auto;
+		}
+		.logo {
+			position: absolute;
+			top: 10px;
+			left: 10px;
+			font-weight: bold;
+			margin-top: 20px;
+			margin-left: 25px;
+			font-size: 22px;
+			text-decoration: none;
+			color: #000;
+		}
+		.titletext {
+			justify-content: center;
+			display: flex;
+			margin-top: 55px
+		}
+		.subscription-name {
+			color: #0000EE;
+			text-decoration: none;
+		}
+		@media (prefers-color-scheme: dark) {
+			body {
+				background-color: #1F1F1F;
+				color: white;
+			}
+			th, td {
+				border: 1px solid white;
+			}
+			.subscription-name {
+				color: white;
+			}
+			.logo {
+				color: white;
+			}
+		}
+	</style>
+</head>
+<body>
+	<a class="logo" href="/">modbot.dev</a>
+	<div style="height: 30px">
+		<h1 class="titletext">Subscription List</h1>
+		<div class="table-container">
+			<table>
+				<tr>
+					<th>Platform</th>
+					<th>Name</th>
+					<th>ID</th>
+				</tr>
+			</table>
+		</div>
+	</div>
+	<script>
+		fetch('/api/subscription-list')
+		.then(response => response.json())
+		.then(json => {
+
+			const table = document.querySelector('table');
+
+			Object.keys(json).forEach(function (platform) {
+				const row = table.insertRow();
+				let cell1 = row.insertCell(0);
+				let cell2 = row.insertCell(1);
+				let cell3 = row.insertCell(2);
+
+				cell1.textContent = platform;
+				cell1.rowSpan = json[platform].length;
+
+				json[platform].forEach(function (subscription, index) {
+					if (index !== 0) {
+						const newRow = table.insertRow();
+						cell2 = newRow.insertCell(0);
+						cell3 = newRow.insertCell(1);
+					}
+					const nameLink = document.createElement('a');
+					nameLink.href = `/subscription/${platform.toLowerCase()}/${subscription.id}`;
+					nameLink.textContent = subscription.name;
+					nameLink.classList.add("subscription-name");
+					cell2.appendChild(nameLink);
+
+					cell3.textContent = subscription.id;
+				});
+			});
+		})
+		.catch(error => alert('Error fetching subscription list:', error));
+	</script>
+
+</body>
+</html>

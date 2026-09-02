@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>modbot</title>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=0.8">
+		<style>
+			body {
+				display: flex;
+				justify-content: center;
+				align-items: flex-start;
+				height: 100vh;
+				margin: 0;
+				background-color: #f0f0f0;
+				color: black;
+				margin-top: 100px;
+				font-family: 'Microsoft JhengHei', sans-serif;
+			}
+			.logo {
+				position: absolute;
+				top: 10px;
+				left: 10px;
+				font-weight: bold;
+				margin-top: 20px;
+				margin-left: 25px;
+				font-size: 22px;
+				text-decoration: none;
+				color: #000;
+			}
+			@media (prefers-color-scheme: dark) {
+				body {
+					background-color: #1f1f1f;
+					color: white;
+				}
+				.logo {
+					color: white;
+				}
+			}
+		</style>
+	</head>
+
+	<body>
+		<p class="logo">modbot</p>
+		<div style="height: 300px; transform: scale(1.5); margin-top: 40px;">
+			<h1 style="justify-content: center; display: flex;">Login</h1>
+			{% if error %}
+			<p style="color:#ff4d4f; text-align:center;">{{ error }}</p>
+			{% endif %}
+			<form action="{{ path or '/login' }}" method="post">
+				<p><label for="user">User</label></p>
+				<p><input type="text" id="user" name="user" value="{{ user or '' }}" style="width: 230px; height: 15px;" required></p>
+				<p><label for="password">Password</label></p>
+				<p><input type="password" id="password" name="password" style="width: 230px; height: 15px;" required></p>
+				<p><input type="submit" value="Enter"></p>
+			</form>
+		</div>
+	</body>
+</html>

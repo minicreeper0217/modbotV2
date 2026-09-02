@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Chat List | modbot</title>
+<link rel="icon" href="/favicon/favicon.ico">
+<style>
+	body {
+		background-color: #f0f0f0;
+		margin: 0;
+		font-family: 'Microsoft JhengHei', sans-serif;
+		color: black;
+	}
+	.logo {
+		position: absolute;
+		top: 10px;
+		left: 10px;
+		font-weight: bold;
+		margin-top: 20px;
+		margin-left: 25px;
+		font-size: 22px;
+		text-decoration: none;
+		color: #000;
+	}
+	.container {
+		max-width: 800px;
+		margin: 100px auto 40px;
+		padding: 0 16px;
+	}
+	.chat-list {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+	}
+	.chat-item {
+		background: #fff;
+		border: 1px solid #ccc;
+		border-radius: 8px;
+		padding: 12px 14px;
+		cursor: pointer;
+		position: relative;
+		transition: 0.15s;
+	}
+	.chat-item:hover {
+		background: #f5f5f5;
+	}
+	.chat-item.editing {
+		box-shadow: 0 0 0 2px rgba(88,101,242,0.3);
+	}
+	.chat-item.editing .more-btn {
+		display: none;
+	}
+	.chat-top {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-start;
+		padding-right: 30px;
+	}
+	.chat-title {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+	.chat-id {
+		font-size: 12px;
+		color: #888;
+		font-weight: normal;
+		background: #eee;
+		padding: 2px 6px;
+		border-radius: 4px;
+		font-size: 11px;
+	}
+	.chat-id-boy {
+		background: #DBF4FF;
+		color: #3B82F6;
+	}
+	.chat-id-girl {
+		background: #FFE4F1;
+		color: #EC4899;
+	}
+	.chat-preview {
+		font-size: 14px;
+		color: #666;
+		margin-top: 4px;
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+		word-break: break-word;
+	}
+	.chat-preview:empty {
+		display: none;
+	}
+	.chat-time:empty {
+		display: none;
+	}
+	.chat-time {
+		color: #888;
+	}
+	.more-btn {
+		color: #000;
+		position: absolute;
+		right: 10px;
+		top: 10px;
+		border: none;
+		background: none;
+		cursor: pointer;
+		font-size: 18px;
+	}
+	.menu {
+		position: absolute;
+		right: 10px;
+		top: 35px;
+		background: white;
+		border: 1px solid #ccc;
+		border-radius: 6px;
+		display: none;
+		z-index: 10;
+	}
+	.menu button {
+		display: block;
+		width: 100%;
+		font-size: 15px;
+		border: none;
+		color: #000;
+		background: none;
+		padding: 8px 12px;
+		text-align: left;
+		cursor: pointer;
+	}
+	.menu button:hover {
+		background: #eee;
+	}
+	.rename-box {
+		display: flex;
+		gap: 4px;
+		margin-top: 6px;
+		align-items: center;
+		width: 100%;
+		max-width: 100%;
+		box-sizing: border-box;
+	}
+	.rename-box .chat-id {
+		flex-shrink: 0;
+	}
+	.rename-box button {
+		flex-shrink: 0;
+	}
+	.rename-box .save {
+		background: #248046;
+	}
+	.rename-box .cancel {
+		background: #da373c;
+	}
+	.rename-input {
+		flex: 1;
+		font-size: 16px;
+		padding: 6px;
+		min-width: 68%;
+	}
+	button {
+		border-radius: 5px;
+		padding: 4px 8px;
+		cursor: pointer;
+	}
+	@media (prefers-color-scheme: dark) {
+		body {
+			background-color: #1f1f1f;
+			color: white;
+		}
+		.chat-item {
+			background: #000;
+			border-color: #555;
+		}
+		.chat-item:hover {
+			background: #1a1a1a;
+		}
+		.chat-id-boy {
+			background: #204B6D;
+			color: #B8E6FF;
+		}
+		.chat-id-girl {
+			background: #5C2C4A;
+			color: #FFC4DD;
+		}
+		.more-btn {
+			color:white;
+		}
+		.rename-input {
+			background: #1a1a1a;
+			color: white;
+		}
+		.menu {
+			background: #000;
+			color: white;
+			border-color: #555;
+		}
+		.menu button {
+			color: white;
+		}
+		.logo {
+			color: white;
+		}
+	}
+</style>
+</head>
+<body>
+
+<a class="logo" href="/">modbot.dev</a>
+<div class="container">
+	<div class="chat-list" id="chatList"></div>
+</div>
+
+<script>
+fetch('/api/log/chatlist')
+.then(res => res.json())
+.then(data => {
+
+	let currentEditingItem = null;
+	const list = document.getElementById("chatList");
+	const sortedIds = Object.keys(data).sort((a, b) => {
+		const chatA = data[a];
+		const chatB = data[b];
+
+		const timeA = chatA.updatedAt;
+		const timeB = chatB.updatedAt;
+
+		if (timeA && timeB) {
+			return timeB - timeA;
+		}
+
+		if (timeA) return -1;
+
+		if (timeB) return 1;
+
+		return Number(b) - Number(a);
+	});
+	sortedIds.forEach(id => {
+		const chat = data[id];
+
+		const item = document.createElement("div");
+		item.className = "chat-item";
+
+		item.innerHTML = `
+			<div class="chat-top">
+				<div class="chat-title">
+					<span class="${getChatIdClass(chat)}">#${id}</span>${chat.name || "（無標題）"}
+				</div>
+				<div class="chat-time">${chat.updatedAt ? formatTime(chat.updatedAt) : ""}</div>
+			</div>
+			<div class="chat-preview">${chat.lastMessage || ""}</div>
+			<button class="more-btn">⋯</button>
+			<div class="menu">
+				<button class="rename">重新命名</button>
+				<button class="delete">刪除</button>
+			</div>
+		`;
+
+		item.addEventListener("click", () => {
+			if (item.classList.contains("editing")) return;
+			window.location.href = `/chat/${id}`;
+		});
+
+		const moreBtn = item.querySelector(".more-btn");
+		const menu = item.querySelector(".menu");
+		menu.addEventListener("click", e => e.stopPropagation());
+
+		moreBtn.addEventListener("click", (e) => {
+			e.stopPropagation();
+			menu.style.display = menu.style.display === "block" ? "none" : "block";
+		});
+
+		item.querySelector(".rename").addEventListener("click", (e) => {
+			e.stopPropagation();
+			menu.style.display = "none";
+
+			if (currentEditingItem && currentEditingItem !== item) {
+				const oldItem = currentEditingItem;
+				const oldChatTop = oldItem.querySelector(".chat-top");
+				const oldData = oldItem._originalData;
+
+				oldChatTop.innerHTML =
+					'<div class="chat-title">' +
+					'<span class="' + getChatIdClass(chat) + '">#' + oldData.id + '</span>'
+					oldData.title + '</div>' +
+					'<div class="chat-time">' +
+					(oldData.time ? formatTime(oldData.time) : '') +
+					'</div>';
+
+				oldItem.classList.remove("editing");
+				currentEditingItem = null;
+			}
+
+			if (item.classList.contains("editing")) return;
+			item.classList.add("editing");
+
+			currentEditingItem = item;
+			item._originalData = {
+				id: id,
+				title: chat.name || "（無標題）",
+				time: chat.updatedAt
+			};
+
+			const chatTop = item.querySelector(".chat-top");
+			const originalTitle = chat.name || "（無標題）";
+
+			const renameBox = document.createElement("div");
+			renameBox.className = "rename-box";
+
+			renameBox.innerHTML = `
+				<span class=${getChatIdClass(chat)}>#${id}</span>
+				<input class="rename-input" value="${originalTitle}">
+				<button class="save">✔</button>
+				<button class="cancel">✖</button>
+			`;
+
+			chatTop.innerHTML = "";
+			chatTop.appendChild(renameBox);
+
+			const input = renameBox.querySelector("input");
+			input.focus();
+
+			renameBox.addEventListener("click", e => e.stopPropagation());
+
+			renameBox.querySelector(".save").onclick = async () => {
+				const newTitle = input.value || "（無標題）";
+
+				try {
+					chatTop.innerHTML =
+						'<div class="chat-title">' +
+						'<span class=${getChatIdClass(chat)}>#' + id + '</span>' +
+						newTitle + '</div>' +
+						'<div class="chat-time">' +
+						(chat.updatedAt ? formatTime(chat.updatedAt) : '') +
+						'</div>';
+
+					item.classList.remove("editing");
+					await chatAction(id, "change_name", newTitle);
+					chat.name = newTitle;
+					currentEditingItem = null;
+
+				} catch (err) {
+					alert("修改失敗");
+
+					chatTop.innerHTML =
+						'<div class="chat-title">' +
+						'<span class=${getChatIdClass(chat)}>#' + id + '</span>' +
+						originalTitle + '</div>' +
+						'<div class="chat-time">' +
+						(chat.updatedAt ? formatTime(chat.updatedAt) : '') +
+						'</div>';
+
+					item.classList.remove("editing");
+				}
+			};
+
+			renameBox.querySelector(".cancel").onclick = () => {
+				chatTop.innerHTML =
+					'<div class="chat-title">' +
+					'<span class=${getChatIdClass(chat)}>#' + id + '</span>' +
+					originalTitle + '</div>' +
+					'<div class="chat-time">' +
+					(chat.updatedAt ? formatTime(chat.updatedAt) : '') +
+					'</div>';
+
+				item.classList.remove("editing");
+				currentEditingItem = null;
+			};
+		});
+
+		item.querySelector(".delete").addEventListener("click", async (e) =>  {
+			e.stopPropagation();
+			menu.style.display = "none";
+			if (confirm(`確定刪除這個對話？\n#${id} ${chat.name || "（無標題）"}`)) {
+				try {
+					item.remove();
+					await chatAction(id, "delete_chat");
+				} catch (err) {
+					alert("刪除失敗");
+					location.reload();
+				}
+			}
+		});
+
+		list.appendChild(item);
+	});
+
+	function formatTime(ts) {
+		if (!ts) return "";
+
+		if (ts.toString().length === 10) {
+			ts *= 1000;
+		}
+
+		const date = new Date(ts);
+		const now = new Date();
+
+		const diff = now - date;
+		const oneDay = 86400000;
+
+		if (diff < oneDay) {
+			return date.toLocaleTimeString("zh-TW", {
+				hour: "2-digit",
+				minute: "2-digit",
+				hour12: false
+			});
+		} else {
+			return date.toLocaleDateString("zh-TW", {
+				month: "2-digit",
+				day: "2-digit",
+			});
+		}
+	}
+
+	async function chatAction(id, op, d = null) {
+		const res = await fetch(`/api/chatlist/${id}`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json"
+			},
+			body: JSON.stringify({
+				op,
+				d
+			})
+		});
+
+		if (!res.ok) {
+			throw new Error(`API error: ${res.status}`);
+		}
+	}
+
+	function getChatIdClass(chat) {
+		return chat.sex === "b"
+			? "chat-id chat-id-boy"
+			: "chat-id chat-id-girl";
+	}
+
+	document.addEventListener("click", () => {
+	document.querySelectorAll(".menu").forEach(m => {
+		m.style.display = "none";
+	});
+	});
+})
+.catch(err => {
+	console.error(err);
+	alert("載入失敗");
+});
+</script>
+
+</body>
+</html>

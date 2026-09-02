@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Home | modbot</title>
+		<link rel="apple-touch-icon" sizes="120x120" href="/favicon/apple-touch-icon.png">
+		<link rel="icon" type="image/x-icon" href="/favicon/favicon.ico">
+		<link rel="icon" type="image/png" sizes="32x32" href="/favicon/favicon-32x32.png">
+		<link rel="icon" type="image/png" sizes="16x16" href="/favicon/favicon-16x16.png">
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<style>
+			body {
+				display: flex;
+				justify-content: center;
+				align-items: flex-start;
+				height: 100vh;
+				margin: 0;
+				background-color: #f0f0f0;
+				color: black;
+				margin-top: 100px;
+				font-family: 'Microsoft JhengHei', sans-serif;
+			}
+			.links {
+					color: #0000EE;
+					text-decoration: none;
+			}
+			.logo {
+				position: absolute;
+				top: 10px;
+				left: 10px;
+				font-weight: bold;
+				margin-top: 20px;
+				margin-left: 25px;
+				font-size: 22px;
+				text-decoration: none;
+				color: #000;
+			}
+			@media (prefers-color-scheme: dark) {
+				body {
+					background-color: #1f1f1f;
+					color: white;
+				}
+				.links {
+					color: white;
+				}
+				.logo {
+					color: white;
+				}
+			}
+		</style>
+	</head>
+
+	<body>
+		<a class="logo" href="/">modbot.dev</a>
+		<a style="position: absolute; top: 10px; right: 10px; font-weight: bold; margin-top: 20px; margin-right: 25px; font-size: 22px;" class="links" href="/logout">Logout</a>
+		<div style="height: 100px; transform: scale(1.5);">
+			<h1>各種資源</h1>
+			<p></p>
+			<a class="links" href="/chatlist">Chat List</a>
+			<p></p>
+			<a class="links" href="/home/syslog">System Log</a>
+			<p></p>
+			<a class="links" href="/home/applog">Web App Log</a>
+			<p></p>
+			<a class="links" href="/home/nginx">Nginx Log</a>
+			<p></p>
+			<a class="links" href="/home/tor">Tor Log</a>
+			<p></p>
+			<a class="links" href="/home/backuplog">System Log (Backup)</a>
+			<p></p>
+			<a class="links" href="/home/backupapplog">Web App Log (Backup)</a>
+			<p></p>
+			<a class="links" href="/home/ws-playground">WebSocket Playground</a>
+			<p></p>
+			<a class="links" href="/home/passkeys">Passkeys</a>
+			<p></p>
+			<a class="links" href="https://manage.statuspage.io/pages/hm05819mvmss">Status Manager</a>
+			<p></p>
+			<a class="links" href="/subscription">Subscription List</a>
+			<p></p>
+			<a class="links" href="/home/misskey">Misskey Statistics</a>
+			<p></p>
+
+		</div>
+	</body>
+</html>

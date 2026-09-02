@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Tor Log | modbot</title>
+	<link rel="apple-touch-icon" sizes="120x120" href="/favicon/apple-touch-icon.png">
+	<link rel="icon" type="image/x-icon" href="/favicon/favicon.ico">
+	<link rel="icon" type="image/png" sizes="32x32" href="/favicon/favicon-32x32.png">
+	<link rel="icon" type="image/png" sizes="16x16" href="/favicon/favicon-16x16.png">
+	<style>
+		body {
+			background-color: #f0f0f0;
+			color: black;
+			margin-top: 20px;
+			font-family: 'Microsoft JhengHei', sans-serif;
+		}
+		table {
+			border-collapse: collapse;
+			table-layout: auto;
+			width: auto;
+			white-space: pre;
+			word-wrap: break-word;
+			margin: 0 auto;
+			font-size: 16px;
+		}
+		th, td {
+			border: 1px solid black;
+			padding: 8px;
+			word-wrap: break-word;
+			text-align: center;
+			vertical-align: middle;
+		}
+		td:last-child {
+			text-align: left;
+		}
+		th:first-child, td:first-child {
+			text-align: center;
+		}
+		.table-container {
+			width: 100%;
+			overflow-x: auto;
+		}
+		.warning-row td {
+			background-color: #FFF1C8;
+			color: black;
+		}
+		.error-row td {
+			background-color: #FFD9D9;
+			color: black;
+		}
+		.logo {
+			position: absolute;
+			top: 10px;
+			left: 10px;
+			font-weight: bold;
+			margin-top: 20px;
+			margin-left: 25px;
+			font-size: 22px;
+			text-decoration: none;
+			color: #000;
+		}
+		@media (prefers-color-scheme: dark) {
+			body {
+				background-color: #1F1F1F;
+				color: white;
+			}
+			.warning-row td {
+				background-color: #3B3106;
+				color: white;
+			}
+			.error-row td {
+				background-color: #310606;
+				color: white;
+			}
+			.logo {
+				color: white;
+			}
+		}
+	</style>
+</head>
+<body>
+	<a class="logo" href="/">modbot.dev</a>
+
+	<div style="height: 30px">
+		<h1 style="justify-content: center; display: flex; margin-top: 55px">
+			Tor Log
+		</h1>
+
+		<table>
+			<tr>
+				<th>Date</th>
+				<th>Level</th>
+				<th style="text-align: left;">Message</th>
+			</tr>
+		</table>
+	</div>
+
+	<script>
+		fetch('/api/log/tor')
+			.then(response => {
+				if (response.status === 401) {
+					window.location.href = '/';
+				}
+				return response.text();
+			})
+			.then(logDataString => {
+				logDataString = logDataString.trim();
+
+				if (!logDataString) {
+					return;
+				}
+
+				const logLines = logDataString.split('\n');
+				const table = document.querySelector('table');
+
+				const months = {
+					Jan: 1,
+					Feb: 2,
+					Mar: 3,
+					Apr: 4,
+					May: 5,
+					Jun: 6,
+					Jul: 7,
+					Aug: 8,
+					Sep: 9,
+					Oct: 10,
+					Nov: 11,
+					Dec: 12
+				};
+
+				const entries = [];
+
+				/*
+					Tor log format:
+
+					Aug 10 16:31:48.000 [notice] Bootstrapped 100% (done): Done
+				*/
+				const logRegex =
+					/^([A-Z][a-z]{2})\s+(\d{1,2})\s+(\d{2}:\d{2}:\d{2})\.\d{3}\s+\[(\w+)\]\s+(.+)$/;
+
+				logLines.forEach(logLine => {
+					const logParts = logLine.match(logRegex);
+
+					if (logParts) {
+						entries.push({
+							month: months[logParts[1]],
+							day: Number(logParts[2]),
+							time: logParts[3],
+							level: logParts[4],
+							message: logParts[5],
+							year: null
+						});
+					} else if (entries.length > 0) {
+						/*
+							如果 Message 跨多行，
+							就接到上一筆 log。
+						*/
+						entries[entries.length - 1].message += "\n" + logLine;
+					}
+				});
+
+				if (entries.length === 0) {
+					return;
+				}
+
+				/*
+					Tor 沒有年份，所以先從最後一筆開始推算。
+
+					例如現在是：
+					2027-01-01
+
+					最後一筆：
+					Dec 31 23:59:58
+
+					因為它不可能是未來的 2027-12-31，
+					所以應該屬於 2026。
+				*/
+				const now = new Date();
+				let year = now.getFullYear();
+
+				const lastEntry = entries[entries.length - 1];
+
+				const lastTimestamp = new Date(
+					year,
+					lastEntry.month - 1,
+					lastEntry.day,
+					...lastEntry.time.split(':').map(Number)
+				);
+
+				if (lastTimestamp > now) {
+					year--;
+				}
+
+				/*
+					從最後一筆往前走。
+
+					如果前一筆的月份日期
+					比後一筆還大：
+
+					Dec 31
+					Jan 01
+
+					代表發生了跨年，
+					所以年份減一。
+				*/
+				let currentYear = year;
+
+				for (let i = entries.length - 1; i >= 0; i--) {
+					const entry = entries[i];
+
+					if (i < entries.length - 1) {
+						const nextEntry = entries[i + 1];
+
+						const currentMonthDay =
+							entry.month * 100 + entry.day;
+
+						const nextMonthDay =
+							nextEntry.month * 100 + nextEntry.day;
+
+						if (currentMonthDay > nextMonthDay) {
+							currentYear--;
+						}
+					}
+
+					entry.year = currentYear;
+				}
+
+				/*
+					建立 table rows
+				*/
+				entries.forEach(entry => {
+					const row = document.createElement('tr');
+
+					const formattedDate =
+						`${entry.year}-${String(entry.month).padStart(2, '0')}-${String(entry.day).padStart(2, '0')} ${entry.time}`;
+
+					[
+						formattedDate,
+						entry.level,
+						entry.message
+					].forEach(part => {
+						const cell = document.createElement('td');
+						cell.textContent = part;
+						row.appendChild(cell);
+					});
+
+					const level = entry.level.toLowerCase();
+
+					if (level === 'warning') {
+						row.classList.add('warning-row');
+					} else if (level === 'error') {
+						row.classList.add('error-row');
+					}
+
+					table.appendChild(row);
+				});
+
+				/*
+					最新的 log 顯示在最上面
+				*/
+				const rows = Array.from(table.querySelectorAll('tr'));
+
+				if (rows.length > 1) {
+					rows.shift();
+					rows.reverse();
+
+					rows.forEach(row => {
+						table.appendChild(row);
+					});
+				}
+			});
+	</script>
+</body>
+</html>

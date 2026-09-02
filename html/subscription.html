@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=0.5">
+	<title>Subscription Details | modbot</title>
+	<link rel="apple-touch-icon" sizes="120x120" href="/favicon/apple-touch-icon.png">
+	<link rel="icon" type="image/x-icon" href="/favicon/favicon.ico">
+	<link rel="icon" type="image/png" sizes="32x32" href="/favicon/favicon-32x32.png">
+	<link rel="icon" type="image/png" sizes="16x16" href="/favicon/favicon-16x16.png">
+	<style>
+		body {
+			display: flex;
+			justify-content: center;
+			align-items: flex-start;
+			height: 100vh;
+			margin: 0;
+			background-color: #f0f0f0;
+			color: black;
+			margin-top: 55px;
+			font-family: 'Microsoft JhengHei', sans-serif;
+		}
+		.logo {
+			position: absolute;
+			top: 10px;
+			left: 10px;
+			font-weight: bold;
+			margin-top: 20px;
+			margin-left: 25px;
+			font-size: 22px;
+			text-decoration: none;
+			color: #000;
+		}
+		.title {
+			font-weight: bold;
+			margin-bottom: 5px;
+			font-size: 18px;
+		}
+		.value {
+			margin-bottom: 15px;
+			margin-left: 30px;
+		}
+		@media (prefers-color-scheme: dark) {
+			body {
+				background-color: #1f1f1f;
+				color: white;
+			}
+			.logo {
+				color: white;
+			}
+		}
+	</style>
+</head>
+<body>
+	<a class="logo" href="/">modbot.dev</a>
+	<div>
+		<h1 style="justify-content: center; display: flex;">Subscription Details</h1>
+		<div id="subscription-info"></div>
+	</div>
+
+	<script>
+		const path = window.location.pathname;
+		fetch(`/api${path}`)
+			.then(response => response.json())
+			.then(json => {
+				const subscriptionInfoElement = document.getElementById('subscription-info');
+
+				for (const key in json) {
+					if (json.hasOwnProperty(key)) {
+						const pTitle = document.createElement('p');
+						pTitle.className = 'title';
+						pTitle.textContent = key + ':';
+						subscriptionInfoElement.appendChild(pTitle);
+
+						const pValue = document.createElement('p');
+						pValue.className = 'value';
+						pValue.textContent = json[key];
+						subscriptionInfoElement.appendChild(pValue);
+					}
+				}
+			});
+	</script>
+
+</body>
+</html>

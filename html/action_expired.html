@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}
+安全操作無法完成 | modbot
+{% endblock %}
+
+{% block head %}
+<style>
+  .security-card {
+    width: 100%;
+    background-color: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 30px;
+    box-sizing: border-box;
+  }
+
+  .security-card h1 {
+    margin: 0 0 12px;
+    font-size: 32px;
+  }
+
+  .description {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 17px;
+    line-height: 1.6;
+  }
+
+  .reason {
+    margin-top: 30px;
+    padding: 16px;
+
+    background-color: var(--menu);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+
+    color: var(--text);
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  .reason-label {
+    margin-bottom: 8px;
+
+    color: var(--text-secondary);
+    font-size: 14px;
+  }
+
+  .notice {
+    margin: 24px 0 0;
+
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  
+  h2 {
+    margin-top: 0px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="security-card">
+
+  <h2>
+    ⚠️ 安全操作無法完成
+  </h2>
+
+  <p class="description">
+    這個安全操作目前無法執行，因此沒有進行任何操作。
+  </p>
+
+  <div class="reason">
+
+    <div class="reason-label">
+      可能的原因
+    </div>
+
+    {% if reason == "invalid_token" %}
+
+      此安全連結不存在或已經失效。
+
+    {% elif reason == "session_not_found" %}
+
+      此安全連結所對應的登入 session 已不存在，因此沒有進行任何操作。
+
+    {% elif reason == "expired" %}
+
+      此安全連結已超過有效期限，因此沒有進行任何操作。
+
+    {% else %}
+
+      此安全連結已失效，因此沒有進行任何操作。
+
+    {% endif %}
+
+  </div>
+
+  <p class="notice">
+    如果你仍然認為帳號存在未經授權的登入，
+    請直接登入 modbot.dev 檢查帳號安全性。
+  </p>
+
+</div>
+{% endblock %}

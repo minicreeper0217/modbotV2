@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>modbot</title>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<style>
+			body {
+				display: flex;
+				justify-content: center;
+				align-items: flex-start;
+				height: 100vh;
+				margin: 0;
+				background-color: #f0f0f0;
+				color: black;
+				margin-top: 100px;
+				font-family: 'Microsoft JhengHei', sans-serif;
+			}
+			.logo {
+				position: absolute;
+				top: 10px;
+				left: 10px;
+				font-weight: bold;
+				margin-top: 20px;
+				margin-left: 25px;
+				font-size: 22px;
+				text-decoration: none;
+				color: #000;
+			}
+			@media (prefers-color-scheme: dark) {
+				body {
+					background-color: #1f1f1f;
+					color: white;
+				}
+				.logo {
+					color: white;
+				}
+			}
+		</style>
+	</head>
+
+	<body>
+		<p class="logo">modbot.dev</p>
+    <div>
+      <h1 style="text-align: center;">Please wait...</h1>
+      <h2 id="error-message"></h2>
+		</div>
+
+    <div class="cf-turnstile" data-action="Entrance" data-sitekey="0x4AAAAAAA3AHKaoBKOUWtJ4" data-callback="Callback" data-cdata="${queryString}"></div>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+
+	  <script>
+		  function Callback(token) {
+		  	fetch('/api/turnstile', {
+		  		method: 'POST',
+		  		headers: {
+		  			'Content-Type': 'application/json',
+		  		},
+			  	body: JSON.stringify({ token: token })
+			  })
+			  .then(response => {
+			  	if (response.ok) {
+				  	return response.text();
+				  } else {
+			  		throw new Error('Network Error');
+		  		}
+		  	})
+		  	.then(url => {
+		  		window.location.href = url;
+		  	})
+		  	.catch(error => {
+		  		console.error('Error:', error);
+		  		document.getElementById('error-message').innerText = 'Something went wrong, please try again later.';
+		  	});
+		  }
+	  </script>
+	</body>
+</html>

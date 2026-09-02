@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Web App Log | modbot</title>
+	<link rel="apple-touch-icon" sizes="120x120" href="/favicon/apple-touch-icon.png">
+	<link rel="icon" type="image/x-icon" href="/favicon/favicon.ico">
+	<link rel="icon" type="image/png" sizes="32x32" href="/favicon/favicon-32x32.png">
+	<link rel="icon" type="image/png" sizes="16x16" href="/favicon/favicon-16x16.png">
+	<style>
+		body {
+			background-color: #f0f0f0;
+			color: black;
+			margin-top: 20px;
+			font-family: 'Microsoft JhengHei', sans-serif;
+		}
+		table {
+			border-collapse: collapse;
+			table-layout: auto;
+			width: auto;
+			white-space: pre;
+			word-wrap: break-word;
+			margin: 0 auto;
+			font-size: 16px;
+		}
+		th, td {
+			border: 1px solid black;
+			padding: 8px;
+			word-wrap: break-word;
+			text-align: center;
+			vertical-align: middle;
+		}
+		td:last-child {
+			text-align: left;
+		}
+		th:first-child, td:first-child {
+			text-align: center;
+		}
+		.table-container {
+			width: 100%;
+			overflow-x: auto;
+		}
+		.warning-row td {
+			background-color: #FFF1C8;
+			color: black;
+		}
+		.error-row td {
+			background-color: #FFD9D9;
+			color: black;
+		}
+		.logo {
+			position: absolute;
+			top: 10px;
+			left: 10px;
+			font-weight: bold;
+			margin-top: 20px;
+			margin-left: 25px;
+			font-size: 22px;
+			text-decoration: none;
+			color: #000;
+		}
+		@media (prefers-color-scheme: dark) {
+			body {
+				background-color: #1F1F1F;
+				color: white;
+			}
+			.warning-row td {
+				background-color: #3B3106;
+				color: white;
+			}
+			.error-row td {
+				background-color: #310606;
+				color: white;
+			}
+			.logo {
+				color: white;
+			}
+		}
+	</style>
+</head>
+<body>
+	<a class="logo" href="/">modbot.dev</a>
+	<div style="height: 30px">
+		<h1 style="justify-content: center; display: flex; margin-top: 55px">Web App Log</h1>
+		<table>
+			<tr>
+				<th>Date</th>
+				<th>Level</th>
+				<th style="text-align: left;">Message</th>
+			</tr>
+		</table>
+	</div>
+
+	<script>
+		fetch('/api/log/backupapplog')
+			.then(response => {
+				if (response.status === 401) {
+					window.location.href = '/';
+				}
+				return response.text();
+			})
+			.then(logDataString => {
+				logDataString = logDataString.trim();
+
+				const logLines = logDataString.split('\n');
+				const table = document.querySelector('table');
+
+				logLines.forEach(logLine => {
+					const logParts = logLine.match(/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) (\w+): (.+)/);
+
+					if (logParts && logParts.length === 4) {
+						const row = document.createElement('tr');
+
+						logParts.slice(1).forEach(part => {
+							const cell = document.createElement('td');
+							cell.textContent = part;
+							row.appendChild(cell);
+						});
+
+						const level = logParts[2].toLowerCase();
+						if (level === 'warning') {
+							row.classList.add('warning-row');
+						} else if (level === 'error') {
+							row.classList.add('error-row');
+						}
+
+						table.appendChild(row);
+					} else {
+						const messageCell = table.lastElementChild.lastElementChild;
+						messageCell.textContent += "\n" + logLine;
+					}
+				});
+
+				const rows = Array.from(table.querySelectorAll('tr'));
+				if (rows.length > 1) {
+					rows.shift();
+					rows.reverse();
+					rows.forEach(row => table.appendChild(row));
+				}
+			});
+	</script>
+</body>
+</html>

@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=0.9">
+	<title>Chat Log | modbot</title>
+	<link rel="apple-touch-icon" sizes="120x120" href="/favicon/apple-touch-icon.png">
+	<link rel="icon" type="image/x-icon" href="/favicon/favicon.ico">
+	<link rel="icon" type="image/png" sizes="32x32" href="/favicon/favicon-32x32.png">
+	<link rel="icon" type="image/png" sizes="16x16" href="/favicon/favicon-16x16.png">
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/markdown-it/13.0.2/markdown-it.js" nonce="{{ nonce }}"></script>
+	<style>
+		body {
+			display: flex;
+			justify-content: center;
+			align-items: flex-start;
+			height: 100vh;
+			margin: 0;
+			background-color: #f0f0f0;
+			color: black;
+			margin-top: 100px;
+			font-family: 'Microsoft JhengHei', sans-serif;
+			overflow-x: hidden;
+		}
+		#conversationContainer {
+			max-width: 800px;
+			width: 100%;
+			box-sizing: border-box;
+			overflow-x: hidden;
+		}
+		.conversation {
+			border: 1px solid #ccc;
+			margin-bottom: 18px;
+			padding: 10px;
+			border-radius: 6px;
+			position: relative;
+			background-color: #fff;
+		}
+		.conversation p {
+			margin: 8px 0;
+			line-height: 1.6;
+		}
+		.conversation h1,
+		.conversation h2,
+		.conversation h3 {
+			margin: 12px 0 6px;
+		}
+		.conversation ul {
+			padding-left: 20px;
+		}
+		.conversation li {
+			margin: 4px 0;
+		}
+		.conversation blockquote {
+			border-left: 4px solid #ccc;
+			 margin: 8px 0;
+			padding: 6px 12px;
+			background-color: #f9f9f9;
+			color: #555;
+		}
+		.conversation table {
+			width: 100%;
+			border-collapse: collapse;
+			margin: 10px 0;
+			font-size: 0.95em;
+		}
+		.conversation th,
+		.conversation td {
+			border: 1px solid #ccc;
+			padding: 6px 10px;
+			text-align: left;
+		}
+		.conversation th {
+			background-color: #f5f5f5;
+			font-weight: bold;
+		}
+		.conversation pre {
+			overflow-x: auto;
+			padding: 10px;
+			background-color: #f5f5f5;
+			border-radius: 6px;
+			margin: 10px 0;
+		}
+		.conversation.editing {
+			border-color: #5865f2;
+			box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.2);
+		}
+		.conversation.editing .modelInfo {
+			display: none;
+		}
+		.conversation.editing .editButton {
+			opacity: 0.5;
+			pointer-events: none;
+		}
+		.role-label {
+			font-weight: bold;
+			margin-bottom: 4px;
+		}
+		.message-content {
+			line-height: 1.6;
+			word-break: break-word;
+			overflow-wrap: break-word;
+		}
+		button:disabled {
+			opacity: 0.5;
+			pointer-events: none;
+		}
+		.editButton {
+			cursor: pointer;
+			color: #fff;
+			border: none;
+			padding: 5px 10px;
+			border-radius: 5px;
+			position: absolute;
+			top: 8px;
+		}
+		.editAssistantButton {
+			background-color: #5865f2;
+			right: 0.5rem;
+		}
+		.editUserButton {
+			background-color: #4e5058;
+			right: 8rem;
+		}
+		.editSystemButton {
+			background-color: #248045;
+			right: 0.5rem;
+		}
+		.edit-container {
+			margin-top: 6px;
+		}
+		.edit-textarea {
+			width: 100%;
+			max-width: 100%;
+			min-height: 80px;
+			max-height: 50vh;
+			font-size: 16px;
+			padding: 8px;
+			border-radius: 6px;
+			border: 1px solid #ccc;
+			box-sizing: border-box;
+		}
+		.edit-textarea:focus {
+			outline: none;
+			border-color: #5865f2;
+		}
+		.edit-actions {
+			margin-top: 6px;
+			display: flex;
+			gap: 8px;
+		}
+		.edit-save {
+			background-color: #248046;
+			color: white;
+			border: none;
+			padding: 6px 12px;
+			border-radius: 5px;
+			cursor: pointer;
+		}
+		.edit-cancel {
+			background-color: #da373c;
+			color: white;
+			border: none;
+			padding: 6px 12px;
+			border-radius: 5px;
+			cursor: pointer;
+		}
+		.logo {
+			position: absolute;
+			top: 10px;
+			left: 10px;
+			font-weight: bold;
+			margin-top: 20px;
+			margin-left: 25px;
+			font-size: 22px;
+			text-decoration: none;
+			color: #000;
+		}
+		.id {
+			font-weight: bold;
+			font-size: 18px;
+			position: relative;
+			left: 30px;
+		}
+		.checkbox {
+			transform: scale(1.2);
+			position: absolute;
+			top: 13px;
+		}
+		.modelInfo {
+			 position: absolute;
+			 right: 14rem;
+			 top: 6px;
+			 background-color: #f0f0f0;
+			 padding: 5px 10px;
+			 border-radius: 5px;
+			 font-size: 14px;
+		}
+		#submitBtn {
+			background-color: #248046;
+			color: #fff;
+			border: none;
+			padding: 10px 20px;
+			border-radius: 5px;
+			cursor: pointer;
+			position: absolute;
+			top: 10px;
+			right: 10px;
+			margin-top: 20px;
+			margin-right: 25px;
+		}
+		#newBtn {
+			background-color: #DA373C;
+			color: #fff;
+			border: none;
+			padding: 10px 20px;
+			border-radius: 5px;
+			cursor: pointer;
+			position: absolute;
+			top: 10px;
+			right: 90px;
+			margin-top: 20px;
+			margin-right: 25px;
+		}
+		.reasoning-toggle {
+			margin-top: 8px;
+			padding: 6px 10px;
+			border-radius: 5px;
+			border: none;
+			cursor: pointer;
+			color: #000;
+			background-color: #e0e0e0;
+		}
+		.reasoning-toggle:hover {
+			background-color: #d5d5d5;
+		}
+		.reasoning-box {
+			display: none;
+			margin-top: 8px;
+			margin-bottom: 8px;
+			padding: 10px;
+			background-color: #f5f5f5;
+			border-radius: 5px;
+			font-size: 0.9em;
+			max-height: 200px;
+			overflow-y: auto;
+		}
+		.reasoning-box.show {
+			display: block;
+		}
+		@media (prefers-color-scheme: dark) {
+			body {
+				background-color: #1f1f1f;
+				color: white;
+			}
+			.conversation {
+				background-color: #000;
+			}
+			.conversation blockquote {
+				border-left: 4px solid #555;
+				background-color: #1a1a1a;
+				color: #ccc;
+			}
+			.conversation th,
+			.conversation td {
+				border: 1px solid #555;
+			}
+			.conversation th {
+				background-color: #1a1a1a;
+			}
+			.conversation pre {
+				background-color: #1a1a1a;
+			}
+			.logo {
+				color: white;
+			}
+			.modelInfo {
+				 background-color: #1f1f1f;
+			}
+			.edit-textarea {
+				background-color: #2a2a2a;
+				color: white;
+			}
+			.reasoning-toggle {
+				background-color: #2a2a2a;
+				color: white;
+			}
+			.reasoning-toggle:hover {
+				background-color: #3a3a3a;
+			}
+			.reasoning-box {
+				background-color: #1a1a1a;
+			}
+		}
+		@media (max-width: 768px) {
+			.modelInfo {
+				 right: 12rem;
+				max-width: 25%;
+				font-size: 12px;
+			}
+			.editUserButton {
+				right: 7rem;
+			}
+		}
+	</style>
+</head>
+
+<body>
+	<a class="logo" href="/">modbot.dev</a>
+	<div id="conversationContainer"></div>
+	<button id="submitBtn">送出</button>
+	<button id="newBtn">複製</button>
+
+	<script nonce="{{ nonce }}">
+		const chatid = window.location.pathname.split('/').pop();
+		const md = window.markdownit();
+		let editingState = null;
+		// 結構：{ index: number, field: "user" | "assistant" | "system", value: string }
+
+		fetch(`/api/chatlog/${chatid}`)
+			.then(response => response.json())
+			.then(data => {
+				const json = data;
+				const conversationContainer = document.getElementById("conversationContainer");
+				let shouldScrollToBottom = false;
+
+				function createConversation(entry, index) {
+					const conversationDiv = document.createElement("div");
+					conversationDiv.classList.add("conversation");
+
+					if (editingState && editingState.index === index) {
+						conversationDiv.classList.add("editing");
+					}
+
+					if (entry.id === 0) {
+						const systemDiv = renderEditableBlock(entry, index, "system", "System");
+						conversationDiv.appendChild(systemDiv);
+
+						const editSystemButton = document.createElement("button");
+						editSystemButton.textContent = "Edit System Message";
+						editSystemButton.classList.add("editButton", "editSystemButton");
+						editSystemButton.addEventListener("click", function() {
+							startEdit(entry, index, "system");
+						});
+						conversationDiv.appendChild(editSystemButton);
+					} else {
+
+						const idDiv = document.createElement("div");
+						idDiv.textContent = entry.id.toString();
+						idDiv.classList.add("id");
+						conversationDiv.appendChild(idDiv);
+
+							const checkbox = document.createElement("input");
+							checkbox.type = "checkbox";
+							checkbox.checked = true;
+							checkbox.classList.add("checkbox");
+							conversationDiv.appendChild(checkbox);
+
+							const userDiv = renderEditableBlock(entry, index, "user", "User");
+							conversationDiv.appendChild(userDiv);
+
+							if (entry.image_url) {
+								const imageDiv = document.createElement("div");
+								const image = document.createElement("img");
+								image.src = "/api/chat-images/" + entry.image_url;
+								image.alt = "User provided image";
+								image.style.maxWidth = "100%";
+								imageDiv.appendChild(image);
+								conversationDiv.appendChild(imageDiv);
+							}
+
+							if (entry.reasoning && entry.id !== 0) {
+								const toggleBtn = document.createElement("button");
+								toggleBtn.textContent = "查看思考";
+								toggleBtn.classList.add("reasoning-toggle");
+
+								const reasoningDiv = document.createElement("div");
+								reasoningDiv.classList.add("reasoning-box");
+
+								reasoningDiv.innerHTML = md.render(entry.reasoning);
+
+								toggleBtn.addEventListener("click", () => {
+									reasoningDiv.classList.toggle("show");
+
+									const isOpen = reasoningDiv.classList.contains("show");
+									toggleBtn.textContent = isOpen ? "隱藏思考" : "查看思考";
+								});
+
+								conversationDiv.appendChild(toggleBtn);
+								conversationDiv.appendChild(reasoningDiv);
+							}
+
+							const assistantDiv = renderEditableBlock(entry, index, "assistant", "Assistant");
+							conversationDiv.appendChild(assistantDiv);
+
+							if (entry.model) {
+								const modelDiv = document.createElement("div");
+								modelDiv.textContent = entry.model;
+								modelDiv.classList.add("modelInfo");
+								conversationDiv.appendChild(modelDiv);
+							}
+
+							const editUserButton = document.createElement("button");
+							editUserButton.textContent = "Edit User";
+							editUserButton.classList.add("editButton", "editUserButton");
+							editUserButton.addEventListener("click", function() {
+								startEdit(entry, index, "user");
+							});
+							conversationDiv.appendChild(editUserButton);
+
+							const editAssistantButton = document.createElement("button");
+							editAssistantButton.textContent = "Edit Assistant";
+							editAssistantButton.classList.add("editButton", "editAssistantButton");
+							editAssistantButton.addEventListener("click", function() {
+								startEdit(entry, index, "assistant");
+							});
+							conversationDiv.appendChild(editAssistantButton);
+						}
+
+						conversationContainer.appendChild(conversationDiv);
+					}
+
+					function startEdit(entry, index, field) {
+						const isLast = index === json.length - 1;
+						if (field === "assistant" && isLast) {
+							shouldScrollToBottom = true;
+						}
+
+						editingState = {
+							index,
+							field,
+							value: cleanText(entry[field])
+						};
+						updateConversation();
+					}
+
+					function renderEditableBlock(entry, index, field, label) {
+						const container = document.createElement("div");
+
+						if (editingState && editingState.index === index && editingState.field === field) {
+							container.classList.add("edit-container");
+
+							const labelDiv = document.createElement("div");
+							labelDiv.classList.add("role-label");
+							labelDiv.textContent = `[${label}]`;
+
+							const textarea = document.createElement("textarea");
+							textarea.classList.add("edit-textarea");
+							textarea.value = editingState.value;
+							autoResizeTextarea(textarea);
+
+
+							textarea.addEventListener("input", () => {
+								autoResizeTextarea(textarea);
+							});
+
+							const actions = document.createElement("div");
+							actions.classList.add("edit-actions");
+
+							const saveBtn = document.createElement("button");
+							saveBtn.textContent = "儲存";
+							saveBtn.classList.add("edit-save");
+
+							const cancelBtn = document.createElement("button");
+							cancelBtn.textContent = "取消";
+							cancelBtn.classList.add("edit-cancel");
+
+							saveBtn.addEventListener("click", () => {
+								entry[field] = textarea.value;
+								editingState = null;
+								updateConversation();
+							});
+
+							cancelBtn.addEventListener("click", () => {
+								editingState = null;
+								updateConversation();
+							});
+
+							actions.appendChild(saveBtn);
+							actions.appendChild(cancelBtn);
+
+							container.appendChild(labelDiv);
+							container.appendChild(textarea);
+							container.appendChild(actions);
+
+							setTimeout(() => autoResizeTextarea(textarea), 0);
+
+						} else {
+							container.innerHTML = `<div class="role-label">[${label}]</div><div class="message-content">${md.render(entry[field])}</div>`
+						}
+
+						return container;
+					}
+
+					function autoResizeTextarea(textarea) {
+						textarea.style.height = "auto";
+						textarea.style.height = textarea.scrollHeight + "px";
+					}
+
+					function scrollToLastConversation() {
+						const conversations = document.querySelectorAll('.conversation');
+						if (conversations.length === 0) return;
+
+						const last = conversations[conversations.length - 1];
+						last.scrollIntoView({ behavior: "auto", block: "start" });
+					}
+
+					function cleanText(text) {
+						if (!text) return "";
+						return text.replace(/^\n+/, "");
+					}
+
+					function updateConversation() {
+						const checkboxStates = Array.from(document.querySelectorAll('.checkbox')).map(checkbox => checkbox.checked);
+
+						conversationContainer.innerHTML = "";
+
+						json.forEach(function(entry, i) {
+							createConversation(entry, i);
+						});
+						if (shouldScrollToBottom) {
+							requestAnimationFrame(() => {
+								window.scrollTo({
+									top: document.body.scrollHeight,
+									behavior: "auto"
+								});
+							});
+							shouldScrollToBottom = false;
+						}
+
+						const checkboxes = document.querySelectorAll('.checkbox');
+						checkboxes.forEach((checkbox, i) => {
+							checkbox.checked = checkboxStates[i];
+						});
+					}
+
+					function getSelectedMessages() {
+						const selectedMessages = [];
+						const conversationDivs = document.querySelectorAll('.conversation');
+
+						json.forEach(function(entry, i) {
+							if (entry.id === 0) {
+								selectedMessages.push({
+									"id": entry.id,
+									"system": entry.system
+								});
+							} else {
+								const conversationDiv = conversationDivs[i];
+								const checkbox = conversationDiv.querySelector('.checkbox');
+
+								if (checkbox && checkbox.checked) {
+									selectedMessages.push({
+										"id": entry.id,
+										"user": entry.user,
+										"assistant": cleanText(entry.assistant),
+										"reasoning": entry.reasoning || null,
+										"model": entry.model || null,
+										"image_url": entry.image_url || null
+									});
+								}
+							}
+						});
+						return selectedMessages;
+					}
+
+					function submitMessages() {
+						const selectedMessages = getSelectedMessages();
+
+						if (selectedMessages.length === 1 && selectedMessages[0].id === 0) {
+							if (!confirm("You haven't selected any messages except the system message. Do you want to continue?")) {
+								return;
+							}
+						}
+
+						fetch(`/api/chat/${chatid}`, {
+							method: 'POST',
+							headers: {
+								'Content-Type': 'application/json',
+							},
+							body: JSON.stringify(selectedMessages),
+						})
+						.then(response => {
+							if (response.status === 204) {
+								alert('Messages submitted successfully!');
+								location.reload();
+							} else {
+								alert(`Error submitting messages. (${response.status})`);
+							}
+						})
+						.catch(error => {
+							alert(`Error submitting messages. (${error})`);
+						});
+					}
+
+					function newMessages() {
+						const selectedMessages = getSelectedMessages();
+
+						if (selectedMessages.length === 1 && selectedMessages[0].id === 0) {
+							alert("Selected message cannot be empty except the system message.");
+							return;
+						}
+
+						const chatName = prompt("Please enter the chat name:");
+						if (chatName === null) return;
+						else if (!chatName) {
+							alert("Chat name cannot be empty. Please try again.");
+							return;
+						}
+
+						const newJson = reindexMessages(selectedMessages);
+
+						const lastId = newJson[newJson.length - 1].id;
+
+						const postData = {
+							"name": chatName,
+							"chatid": chatid,
+							"message": newJson,
+							"lastid": lastId
+						};
+
+						fetch(`/api/chat/new`, {
+							method: 'POST',
+							headers: {
+								'Content-Type': 'application/json',
+							},
+							body: JSON.stringify(postData),
+						})
+						.then(response => {
+							if (response.status === 204) {
+								alert('Messages submitted successfully!');
+							} else {
+								alert(`Error submitting messages. (${response.status})`);
+							}
+						})
+						.catch(error => {
+							alert(`Error submitting messages. (${error})`);
+						});
+					}
+
+					function reindexMessages(messages) {
+						let newIndex = 0;
+
+						return messages.map((entry) => {
+							if (entry.system !== undefined) {
+								return {
+									...entry,
+									id: 0
+								};
+							}
+
+							newIndex += 1;
+
+							return {
+								...entry,
+								id: newIndex
+							};
+						});
+					}
+
+				json.forEach(function(entry, index) {
+					createConversation(entry, index);
+					scrollToLastConversation();
+				});
+
+				submitButton = document.getElementById("submitBtn")
+				newButton = document.getElementById("newBtn")
+				submitButton.addEventListener("click", async function () {
+					if (submitButton.disabled) return;
+					submitButton.disabled = true;
+					newButton.disabled = true;
+					await new Promise(r => setTimeout(r, 40));
+					try {
+						await submitMessages();
+					} finally {
+						await new Promise(r => setTimeout(r, 1000));
+						newButton.disabled = false;
+						submitButton.disabled = false;
+					}
+				});
+
+				newButton.addEventListener("click", async function () {
+					if (newButton.disabled) return;
+					newButton.disabled = true;
+					submitButton.disabled = true;
+					await new Promise(r => setTimeout(r, 40));
+					try {
+						await newMessages();
+					} finally {
+						newButton.disabled = false;
+						submitButton.disabled = false;
+					}
+				});
+
+			})
+			.catch(error => {
+				alert(`Error fetching chat log. (${error.status})`);
+			});
+	</script>
+</body>
+
+</html>

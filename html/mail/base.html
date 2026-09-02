@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>
+    {% block title %}
+    modbot.dev
+    {% endblock %}
+  </title>
+
+  {% block head %}{% endblock %}
+</head>
+
+<body style="
+  margin: 0;
+  padding: 0;
+  background-color: #f0f0f0;
+  color: #000000;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',
+         'Microsoft JhengHei', Arial, sans-serif;
+">
+
+<table
+  role="presentation"
+  width="100%"
+  cellpadding="0"
+  cellspacing="0"
+  border="0"
+  style="
+    background-color: #f0f0f0;
+    margin: 0;
+    padding: 0;
+  "
+>
+  <tr>
+    <td align="center" style="padding: 40px 16px;">
+
+      <table
+        role="presentation"
+        width="100%"
+        cellpadding="0"
+        cellspacing="0"
+        border="0"
+        style="
+          max-width: 600px;
+          width: 100%;
+          margin: 0 auto;
+        "
+      >
+
+        <!-- Header -->
+        <tr>
+          <td style="
+            padding: 0 8px 24px 8px;
+            font-size: 22px;
+            line-height: 28px;
+            font-weight: bold;
+            color: #000000;
+          ">
+            modbot<span>.</span>dev
+          </td>
+        </tr>
+
+        <!-- Content -->
+        <tr>
+          <td style="
+            background-color: #ffffff;
+            border: 1px solid #cccccc;
+            border-radius: 8px;
+            padding: 28px;
+          ">
+            {% block content %}{% endblock %}
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="
+            padding: 20px 8px 0 8px;
+            font-size: 12px;
+            line-height: 18px;
+            color: #888888;
+          ">
+            此郵件由 modbot 自動寄出。
+          </td>
+        </tr>
+
+      </table>
+
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>
