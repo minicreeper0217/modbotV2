@@ -44,6 +44,10 @@
 			background-color: #FFF1C8;
 			color: black;
 		}
+		.yukimori-row td {
+			background-color: #DFF3FF;
+			color: black;
+		}
 		.onion-row td {
 			background-color: #E8BCF0;
 			color: black;
@@ -66,6 +70,10 @@
 			}
 			.warning-row td {
 				background-color: #3B3106;
+				color: white;
+			}
+			.yukimori-row td {
+				background-color: #173444;
 				color: white;
 			}
 			.onion-row td {
@@ -119,11 +127,14 @@
 
 						const domainRegex = /"https modbot\.dev"/;
 						const domainRegexOnion = /"http kogumaiz4oqk7czct3hu6lgqmsmx6vhe4uckokmks34xl7bc7fxvnqad\.onion"/;
+						const domainRegexYukimori = /"https yukimori\.dev"/;
 
-						if (!domainRegex.test(logParts[3]) && !domainRegexOnion.test(logParts[3])) {
-							row.classList.add('warning-row');
+						if (domainRegexYukimori.test(logParts[3])) {
+							row.classList.add('yukimori-row');
 						} else if (domainRegexOnion.test(logParts[3])) {
 							row.classList.add('onion-row');
+						} else if (!domainRegex.test(logParts[3])) {
+							row.classList.add('warning-row');
 						}
 						row.children[1].style.textAlign = "left";
 						table.appendChild(row);
