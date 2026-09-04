@@ -25,12 +25,11 @@ class Automatic(commands.Cog):
 	def __init__(self, bot):
 		self.bot:commands.Bot = bot
 		asyncio.create_task(Automatic.start(self))
-		logging.info(config.domain)
 
 	async def start(self):
 		await self.bot.wait_until_ready()
 		schedule.every(1).day.at("02:00", tz=tz).do(lambda: asyncio.create_task(self.check_log())).tag("automatic")
-		schedule.every(1).day.at("07:08", tz=tz).do(lambda: asyncio.create_task(self.update_certificates())).tag("automatic")
+		schedule.every(1).day.at("04:05", tz=tz).do(lambda: asyncio.create_task(self.update_certificates())).tag("automatic")
 		schedule.every(1).day.at("06:00", tz=tz).do(lambda: asyncio.create_task(self.check_ytsubscribe())).tag("automatic")
 		schedule.every(1).day.at("08:00", tz=tz).do(lambda: asyncio.create_task(self.cat())).tag("automatic")
 		schedule.every(1).day.at("14:00", tz=tz).do(lambda: asyncio.create_task(self.check_ytsubscribe())).tag("automatic")
