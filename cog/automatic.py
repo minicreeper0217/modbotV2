@@ -25,6 +25,7 @@ class Automatic(commands.Cog):
 	def __init__(self, bot):
 		self.bot:commands.Bot = bot
 		asyncio.create_task(Automatic.start(self))
+		logging.info(config.domain)
 
 	async def start(self):
 		await self.bot.wait_until_ready()
