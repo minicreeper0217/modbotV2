@@ -30,7 +30,7 @@ class Automatic(commands.Cog):
 		await self.bot.wait_until_ready()
 		schedule.every(1).day.at("02:00", tz=tz).do(lambda: asyncio.create_task(self.check_log())).tag("automatic")
 		schedule.every(1).day.at("04:05", tz=tz).do(lambda: asyncio.create_task(self.update_certificates())).tag("automatic")
-		schedule.every(1).day.at("06:00", tz=tz).do(lambda: asyncio.create_task(self.check_ytsubscribe())).tag("automatic")
+		schedule.every(1).day.at("08:40", tz=tz).do(lambda: asyncio.create_task(self.check_ytsubscribe())).tag("automatic")
 		schedule.every(1).day.at("08:00", tz=tz).do(lambda: asyncio.create_task(self.cat())).tag("automatic")
 		schedule.every(1).day.at("14:00", tz=tz).do(lambda: asyncio.create_task(self.check_ytsubscribe())).tag("automatic")
 		schedule.every(1).day.at("22:00", tz=tz).do(lambda: asyncio.create_task(self.check_ytsubscribe())).tag("automatic")
@@ -110,6 +110,7 @@ class Automatic(commands.Cog):
 		with sqlite3.connect(os.path.join(config.dir, 'database', 'youtube.db')) as db:
 			cursor = db.execute('SELECT id FROM subscribe WHERE time < ?', (now + 100000,)).fetchall()
 			if len(cursor) > 0:
+				logging.info("Start update youtube subscribe")
 				async with aiohttp.ClientSession() as session:
 					for idtup in cursor:
 						id = idtup[0]
@@ -121,10 +122,12 @@ class Automatic(commands.Cog):
 						try:
 							async with session.post(url) as r:
 								r.raise_for_status()
+								logging.info(url)
 						except:
 							logging.exception("Update youtube subscribe failed!")
 							break
 				db.commit()
+				logging.info(f"Updated {len(cursor)} youtube subscribe")
 
 	async def update_certificates(self):
 		domain_list = [
