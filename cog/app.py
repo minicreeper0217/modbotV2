@@ -98,7 +98,7 @@ class APP(commands.Cog):
 	async def ytfetch(self, request:web.Request):
 		if request.query.get('hub.challenge') and request.query.get("hub.verify_token"):
 			parsed_url = urlparse(request.query['hub.topic'])
-			if parsed_url.netloc != "www.youtube.com" or "/xml/feeds/videos.xml" not in parsed_url.path:
+			if parsed_url.netloc != "www.youtube.com" or "/feeds/videos.xml" not in parsed_url.path:
 				return web.Response(status=404, text="")
 			query_params = parse_qs(parsed_url.query)
 			channel_id = query_params['channel_id'][0]
@@ -1111,7 +1111,7 @@ class APP(commands.Cog):
 				return web.Response(status=404,text="")
 			channel_name = db.execute('SELECT name FROM subscribe WHERE id = ?', (channel_id,)).fetchone()[0]
 		async with aiohttp.ClientSession() as s:
-			async with s.get(f"https://pubsubhubbub.appspot.com/subscription-details?hub.callback=https%3A%2F%2F{config.domain}%2Fwebhook%2Fyoutube%2F{channel_id}&hub.topic=https%3A%2F%2Fwww.youtube.com%2Fxml%2Ffeeds%2Fvideos.xml%3Fchannel_id%3D{channel_id}&hub.secret={secret[0]}") as r:
+			async with s.get(f"https://pubsubhubbub.appspot.com/subscription-details?hub.callback=https%3A%2F%2F{config.domain}%2Fwebhook%2Fyoutube%2F{channel_id}&hub.topic=https%3A%2F%2Fwww.youtube.com%2Ffeeds%2Fvideos.xml%3Fchannel_id%3D{channel_id}&hub.secret={secret[0]}") as r:
 				r.raise_for_status()
 				html_content = await r.read()
 				s = BeautifulSoup(html_content, 'html.parser')
