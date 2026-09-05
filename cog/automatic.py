@@ -118,7 +118,7 @@ class Automatic(commands.Cog):
 						verify_token = hmac.new(bytes(config.secret,"utf-8"), bytes(secret,"utf-8"), hashlib.sha256).hexdigest()
 						db.execute('UPDATE subscribe SET secret = ? WHERE id = ?', (secret, id))
 						db.commit()
-						url = f"https://pubsubhubbub.appspot.com/subscribe?hub.callback=https%3A%2F%2F{config.domain}%2Fwebhook%2Fyoutube%2F{id}&hub.topic=https%3A%2F%2Fwww.youtube.com%2Fxml%2Ffeeds%2Fvideos.xml%3Fchannel_id%3D{id}&hub.verify=async&hub.mode=subscribe&hub.verify_token={verify_token}&hub.secret={secret}&hub.lease_numbers=432000"
+						url = f"https://pubsubhubbub.appspot.com/subscribe?hub.callback=https%3A%2F%2F{config.domain}%2Fwebhook%2Fyoutube%2F{id}&hub.topic=https%3A%2F%2Fwww.youtube.com%2Ffeeds%2Fvideos.xml%3Fchannel_id%3D{id}&hub.verify=async&hub.mode=subscribe&hub.verify_token={verify_token}&hub.secret={secret}&hub.lease_numbers=432000"
 						try:
 							async with session.post(url) as r:
 								r.raise_for_status()
