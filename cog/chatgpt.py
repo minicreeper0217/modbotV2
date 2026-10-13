@@ -214,7 +214,6 @@ class GPTres:
 				)
 
 			embed_list.append(embed)
-			self._last_sent = self.assistant_msg
 
 			if self.discord_msg is None:
 				if self.image_url:
@@ -238,6 +237,8 @@ class GPTres:
 					self.discord_msg = await self.discord_msg.edit(
 						embeds=embed_list
 					)
+
+			self._last_sent = self.assistant_msg
 
 class ChatGPT(commands.Cog):
 	chatgptcom = app_commands.Group(
