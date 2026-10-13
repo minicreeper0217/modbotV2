@@ -35,7 +35,7 @@ class GPTres:
 		chatid,
 		msgid,
 		ctx: discord.Interaction,
-		sex_str,
+		color,
 		image_url=None,
 		image_id=None,
 		user_msg=None
@@ -43,7 +43,7 @@ class GPTres:
 		self.chatid = chatid
 		self.msgid = msgid
 		self.ctx = ctx
-		self.sex_str = sex_str
+		self.color = color
 		self.image_url = image_url
 
 		self.usage = None
@@ -150,9 +150,8 @@ class GPTres:
 		async with self._send_lock:
 			embed_list = self.embed_list.copy()
 
-			color = 0x7DD3FC if self.sex_str == "b" else 0xF9A8D4
 			embed = discord.Embed(
-				color=discord.Colour(color),
+				color=discord.Colour(self.color),
 				description=self.assistant_msg.replace("`", r"\`")
 			)
 			embed.set_author(name="ChatGPT")
@@ -203,6 +202,10 @@ class ChatGPT(commands.Cog):
 	def __init__(self, bot):
 		self.bot: commands.Bot = bot
 
+		self.route_openai = {
+  		"token": config.chatgpt_moderations
+		}
+
 		self.route_girl = {
 			"base_url": "scfw7zf2j7me4nvbra5zdy7i.agents.do-ai.run",
 			"token": config.chatgpt_girl_token
@@ -212,8 +215,31 @@ class ChatGPT(commands.Cog):
 			"token": config.chatgpt_boy_token
 		}
 
-		self.model = "gpt-3.5-turbo"
-		self.model_image = "dall-e-3"
+		self.chat_types = {
+			"b": {
+				"color": 0x7DD3FC,
+				"api": "completions",
+				"route": self.route_boy
+			},
+			"g": {
+				"color": 0xF9A8D4,
+				"api": "completions",
+				"route": self.route_girl
+			},
+			"c1": {
+				"color": 0x86EFAC,
+				"api": "responses",
+				"instructions": config.chatgpt_c1_introduction
+			},
+			"c2": {
+				"color": 0xC4B5FD,
+				"api": "responses",
+				"instructions": config.chatgpt_c2_introduction
+			}
+		}
+
+		self.model = "gpt-6-luna"
+		self.model_image = "gpt-image-2.5-flare"
 		self.chatgptchannel = config.chatgpt_channel
 
 		database_path = os.path.join(
@@ -362,6 +388,99 @@ class ChatGPT(commands.Cog):
 
 					return res_cls
 
+	async def chat_responses(
+		self,
+		message: list,
+		max_tokens: int,
+		chatid: str | int,
+		instructions: str,
+		model: str,
+		res_cls: GPTres
+	) -> GPTres:
+		chat_uuid = self.chatgptdb.execute(
+			"SELECT uuid FROM list WHERE id = ?",
+			(int(chatid),)
+		).fetchone()[0]
+
+		data = {
+			"model": model,
+			"instructions": instructions,
+			"input": message,
+			"max_output_tokens": max_tokens,
+			"stream": True,
+			"store": False,
+			"safety_identifier": chat_uuid
+		}
+		headers = {
+			"Authorization": f"Bearer {config.chatgpt_user}",
+			"Content-Type": "application/json"
+		}
+
+		timeout = aiohttp.ClientTimeout(total=610)
+		start_time = time.perf_counter()
+
+		async with aiohttp.ClientSession(timeout=timeout) as session:
+			async with session.post(
+				"https://api.openai.com/v1/responses",
+				json=data,
+				headers=headers
+			) as response:
+				response.raise_for_status()
+
+				async for raw_line in response.content:
+					line = raw_line.decode("utf-8").strip()
+
+					if not line.startswith("data: "):
+						continue
+
+					event = json.loads(line[6:])
+
+					match event.get("type"):
+						case "response.created":
+							result = event["response"]
+							res_cls.completion_id = result["id"]
+							res_cls.model = result["model"]
+
+						case "response.output_text.delta":
+							res_cls.assistant_msg += event["delta"]
+							res_cls.first_token.set()
+
+						case "response.reasoning_summary_text.delta":
+							res_cls.assistant_reasoning += event["delta"]
+
+						case "response.completed":
+							result = event["response"]
+							usage = result["usage"]
+
+							res_cls.completion_id = result["id"]
+							res_cls.model = result["model"]
+
+							res_cls.usage = {
+								"prompt_tokens": usage["input_tokens"],
+								"completion_tokens": usage["output_tokens"],
+								"total_tokens": usage["total_tokens"]
+							}
+
+							process_time = round(
+								time.perf_counter() - start_time, 2
+							)
+							await res_cls.done(process_time)
+							return res_cls
+
+						case "response.failed":
+							error = event["response"].get("error") or {}
+							raise RuntimeError(
+								f"Responses API failed: {error}"
+							)
+
+						case "response.incomplete":
+							details = event["response"].get("incomplete_details")
+							raise RuntimeError(
+								f"Responses API incomplete: {details}"
+							)
+
+		raise RuntimeError("Responses API stream ended unexpectedly")
+
 	def ischat(self, chatid:str | int) -> bool:
 		cursor = self.chatgptdb.execute('SELECT * FROM list WHERE id = ?', (int(chatid),)).fetchone()
 		if cursor is None:
@@ -371,15 +490,13 @@ class ChatGPT(commands.Cog):
 		else:
 			return True
 
-	def get_chat_sex(self, chatid:str | int):
-		cursor = self.chatgptdb.execute('SELECT sex FROM list WHERE id = ?', (int(chatid),)).fetchone()[0]
-		match cursor:
-			case "b":
-				return "b", self.route_boy
-			case "g":
-				return "g", self.route_girl
-			case _:
-				return "g", self.route_girl
+	def get_chat_config(self, chatid: str | int) -> dict:
+		chat_type = self.chatgptdb.execute(
+			"SELECT sex FROM list WHERE id = ?",
+			(int(chatid),)
+		).fetchone()[0]
+
+		return self.chat_types.get(chat_type, self.chat_types["g"])
 
 	def token_set(self, tokens_usage:dict, token_punish:int) -> int:
 		tokens = self.chatgptdb.execute('SELECT value FROM memo WHERE key = ?', ("token_limit",)).fetchone()[0]
@@ -392,7 +509,8 @@ class ChatGPT(commands.Cog):
 	def get_chat_data(
 		self,
 		chatid: str | int,
-		message_id: int | None = None
+		message_id: int | None = None,
+		api: str = "completions"
 	) -> tuple[list, int]:
 		msgid = self.chatgptdb.execute(
 			"SELECT msgid FROM list WHERE id = ?",
@@ -403,21 +521,23 @@ class ChatGPT(commands.Cog):
 			config.dir, "data", "chatgpt", str(chatid), "chat.json"
 		)
 
-		with open(chat_path, "r") as f:
+		with open(chat_path, "r", encoding="UTF-8") as f:
 			chat_log = json.load(f)
 
 		chat_data = []
 
 		for message in chat_log:
 			if message["id"] == 0:
+				system_content = (
+					"Region: Japan\n"
+					f"Time Now: {datetime.now(tz=pytz.timezone('Asia/Tokyo')).isoformat(timespec='seconds')}\n"
+					"Note: The time will be updated each time it is sent.\n\n"
+					f"{message['system']}"
+				)
+
 				chat_data.append({
-					"role": "user",
-					"content": (
-						"Region: Japan\n"
-						f"Time Now: {datetime.now(tz=pytz.timezone('Asia/Tokyo')).isoformat(timespec='seconds')}\n"
-						"Note: The time will be updated each time it is sent.\n\n"
-						f"{message['system']}"
-					)
+					"role": "system" if api == "responses" else "user",
+					"content": system_content
 				})
 				continue
 
@@ -429,6 +549,7 @@ class ChatGPT(commands.Cog):
 			if message.get("image_url"):
 				state = uuid.uuid4().hex
 				timestamp = int(datetime.now().timestamp())
+
 				signature = hmac.new(
 					config.secret.encode("UTF-8"),
 					f"{timestamp}-{state}".encode("UTF-8"),
@@ -440,15 +561,31 @@ class ChatGPT(commands.Cog):
 					f"?time={timestamp}&state={state}&token={signature}"
 				)
 
-				image_message = {
-					"type": "image_url",
-					"image_url": {
-						"url": image_url,
-						"detail": "high"
-					}
-				}
-
-				user_message["content"].append(image_message)
+				if api == "responses":
+					user_message["content"] = [
+						{
+							"type": "input_text",
+							"text": message["user"]
+						},
+						{
+							"type": "input_image",
+							"image_url": image_url
+						}
+					]
+				else:
+					user_message["content"] = [
+						{
+							"type": "text",
+							"text": message["user"]
+						},
+						{
+							"type": "image_url",
+							"image_url": {
+								"url": image_url,
+								"detail": "high"
+							}
+						}
+					]
 
 			chat_data.append(user_message)
 			chat_data.append({
@@ -519,7 +656,10 @@ class ChatGPT(commands.Cog):
 		await ctx.followup.send("Please wait...")
 
 		# 取得對話紀錄
-		chat_data, msgid = self.get_chat_data(chatid)
+		chat_data, msgid = self.get_chat_data(
+			chatid,
+			api=chat_config["api"]
+		)
 
 		user_message = {
 			"role": "user",
@@ -552,7 +692,7 @@ class ChatGPT(commands.Cog):
 
 		# 呼叫 AI
 		msgid += 1
-		sex_str, sex_route = self.get_chat_sex(chatid)
+		chat_config = self.get_chat_config(chatid)
 
 		res_cls = GPTres(
 			chatid=chatid,
@@ -561,17 +701,26 @@ class ChatGPT(commands.Cog):
 			user_msg=text,
 			image_id=image_id,
 			image_url=image_url,
-			sex_str=sex_str
+			color=chat_config["color"],
 		)
 
 		try:
-			new_res_cls = await self.chat(
-				message=chat_data,
-				max_tokens=max_tokens,
-				chatid=chatid,
-				res_cls=res_cls,
-				**sex_route
-			)
+			if chat_config["api"] == "responses":
+				new_res_cls = await self.chat_responses(
+					message=chat_data,
+					max_tokens=max_tokens,
+					chatid=chatid,
+					instructions=chat_config["instructions"],
+					res_cls=res_cls
+				)
+			else:
+				new_res_cls = await self.chat(
+					message=chat_data,
+					max_tokens=max_tokens,
+					chatid=chatid,
+					res_cls=res_cls,
+					**chat_config["route"]
+				)
 
 			# 更新資料庫
 			timestamp = int(datetime.now().timestamp())
@@ -693,8 +842,9 @@ class ChatGPT(commands.Cog):
 
 		# 取得並截斷對話紀錄
 		chat_data, msgid = self.get_chat_data(
-			chatid=chatid,
-			message_id=message_id
+			chatid,
+			message_id=message_id,
+			api=chat_config["api"]
 		)
 
 		log_len = len(chat_data)
@@ -713,23 +863,32 @@ class ChatGPT(commands.Cog):
 		last_msg = chat_data[-1]["content"]
 
 		# 呼叫 AI
-		sex_str, sex_route = self.get_chat_sex(chatid)
+		chat_config = self.get_chat_config(chatid)
 
 		res_cls = GPTres(
 			chatid=chatid,
 			msgid=msgid,
 			ctx=ctx,
-			sex_str=sex_str
+			 color=chat_config["color"],
 		)
 
 		try:
-			new_res_cls = await self.chat(
-				message=chat_data,
-				max_tokens=max_tokens,
-				chatid=chatid,
-				res_cls=res_cls,
-				**sex_route
-			)
+			if chat_config["api"] == "responses":
+				new_res_cls = await self.chat_responses(
+					message=chat_data,
+					max_tokens=max_tokens,
+					chatid=chatid,
+					instructions=chat_config["instructions"],
+					res_cls=res_cls
+				)
+			else:
+				new_res_cls = await self.chat(
+					message=chat_data,
+					max_tokens=max_tokens,
+					chatid=chatid,
+					res_cls=res_cls,
+					**chat_config["route"]
+				)
 
 			# 更新資料庫
 			self.chatgptdb.execute(
