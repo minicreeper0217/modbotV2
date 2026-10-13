@@ -248,6 +248,12 @@ class ChatGPT(commands.Cog):
 	def __init__(self, bot):
 		self.bot: commands.Bot = bot
 
+		with open(config.dir / "data" / "chatgpt" / "intro" / "c1", "r") as f:
+			c1_intro = f.read()
+
+		with open(config.dir / "data" / "chatgpt" / "intro" / "c2", "r") as f:
+			c2_intro = f.read()
+
 		self.route_openai = {
 			"token": config.chatgpt_moderations
 		}
@@ -275,12 +281,12 @@ class ChatGPT(commands.Cog):
 			"c1": {
 				"color": 0x86EFAC,
 				"api": "responses",
-				"instructions": config.chatgpt_c1_introduction
+				"instructions": c1_intro
 			},
 			"c2": {
 				"color": 0xC4B5FD,
 				"api": "responses",
-				"instructions": config.chatgpt_c2_introduction
+				"instructions": c2_intro
 			}
 		}
 
