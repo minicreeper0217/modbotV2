@@ -290,7 +290,7 @@ class ChatGPT(commands.Cog):
 			}
 		}
 
-		self.model = "gpt-6-luna"
+		self.model = "gpt-5.6-luna"
 		self.model_image = "gpt-image-2.5-flare"
 		self.chatgptchannel = config.chatgpt_channel
 
