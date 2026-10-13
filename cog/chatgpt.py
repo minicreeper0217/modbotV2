@@ -1,83 +1,121 @@
-import discord
-from discord.ext import commands
-from discord import app_commands
-import uuid
-import config
-import json
-import aiohttp
 import asyncio
-import os
-import tiktoken
-import io
-import sqlite3
-from datetime import datetime
 import base64
-from PIL import Image
-from io import BytesIO
-import math
-import hmac
 import hashlib
-import pytz
-import yarl
-import stepic
+import hmac
+import io
+import json
 import logging
+import math
+import os
+import sqlite3
 import time
+import uuid
 
-tz = pytz.timezone('Asia/Taipei')
+from datetime import datetime
+from io import BytesIO
 
-class GPTres():
-	def __init__(self, chatid, msgid, ctx:discord.Interaction, sex_str, image_url = None, image_id = None, user_msg = None):
+import aiohttp
+import discord
+import pytz
+import stepic
+import tiktoken
+import yarl
+
+from discord import app_commands
+from discord.ext import commands
+from PIL import Image
+
+import config
+
+tz = pytz.timezone("Asia/Taipei")
+
+class GPTres:
+	def __init__(
+		self,
+		chatid,
+		msgid,
+		ctx: discord.Interaction,
+		sex_str,
+		image_url=None,
+		image_id=None,
+		user_msg=None
+	):
 		self.chatid = chatid
 		self.msgid = msgid
+		self.ctx = ctx
 		self.sex_str = sex_str
+		self.image_url = image_url
+
 		self.usage = None
 		self.finish = False
-		self.embed_list = []
-		if user_msg:
-			self.user_msg = user_msg
-			embed = discord.Embed(color=discord.Colour(0x86EFAC), description=self.user_msg)
-			embed.set_author(name=ctx.user.display_name, icon_url=ctx.user.avatar.url)
-			embed.set_footer(text=f"ChatID: {self.chatid} | MessageID: {str(self.msgid)}")
-			if image_url:
-				file_name = uuid.uuid4().hex
-				self.file = discord.File(os.path.join(config.dir, 'data', 'chatgpt', 'images', f'{image_id}.png'), filename=f"{file_name}.png")
-				embed.set_image(url=f"attachment://{file_name}.png")
-			else:
-				self.file = None
-			self.embed_list.append(embed)
-		self.assistant_reasoning = ""
-		self.assistant_msg = ""
-		self.process_time = 0
 		self.model = None
 		self.completion_id = None
+		self.process_time = 0
 		self.assistant_modfoo = None
+
+		self.assistant_msg = ""
+		self.assistant_reasoning = ""
+
+		self.embed_list = []
 		self.discord_msg = None
-		self.image_url = image_url
-		self.ctx = ctx
+
 		self.first_token = asyncio.Event()
 		self._send_lock = asyncio.Lock()
 		self._last_sent = ""
+
+		if user_msg:
+			self.user_msg = user_msg
+
+			embed = discord.Embed(
+				color=discord.Colour(0x86EFAC),
+				description=self.user_msg
+			)
+			embed.set_author(
+				name=ctx.user.display_name,
+				icon_url=ctx.user.avatar.url
+			)
+			embed.set_footer(
+				text=f"ChatID: {self.chatid} | MessageID: {self.msgid}"
+			)
+
+			if image_url:
+				file_name = f"{uuid.uuid4().hex}.png"
+				image_path = os.path.join(
+					config.dir, "data", "chatgpt", "images", f"{image_id}.png"
+				)
+
+				self.file = discord.File(image_path, filename=file_name)
+				embed.set_image(url=f"attachment://{file_name}.png")
+			else:
+				self.file = None
+
+			self.embed_list.append(embed)
+
 		asyncio.create_task(self.pending())
 
 	async def pending(self):
 		await self.first_token.wait()
+
 		while not self.finish:
-			if len(self.assistant_msg) > 0 and self.assistant_msg != self._last_sent:
+			if self.assistant_msg and self.assistant_msg != self._last_sent:
 				try:
 					await self.send()
 				except discord.HTTPException as e:
 					logging.warning("Discord edit failed: %s", e)
+
 			await asyncio.sleep(1)
 
-	async def done(self, process_time:float):
+	async def done(self, process_time: float):
 		self.process_time = process_time
 		self.assistant_modfoo = await self.moderation(self.assistant_msg)
 		self.finish = True
+
 		if not self.first_token.is_set():
 			self.first_token.set()
+
 		await self.send()
 
-	async def moderation(self, text:str) -> str:
+	async def moderation(self, text: str) -> str:
 		headers = {
 			"Content-Type": "application/json",
 			"Authorization": f"Bearer {config.chatgpt_moderations}"
@@ -86,43 +124,85 @@ class GPTres():
 			"model": "omni-moderation-latest",
 			"input": text
 		}
-		async with aiohttp.ClientSession() as s:
-			async with s.post("https://api.openai.com/v1/moderations", data=json.dumps(data), headers=headers) as r:
-				if r.status == 429:
+
+		async with aiohttp.ClientSession() as session:
+			async with session.post(
+				"https://api.openai.com/v1/moderations",
+				json=data,
+				headers=headers
+			) as response:
+				if response.status == 429:
 					return ""
-				r.raise_for_status()
-				mod = await r.json()
-				modfoo = ""
-				for mod_type, mod_bool in mod["results"][0]["categories"].items():
-					if mod_bool:
-						modfoo += f" | {mod_type}: {round(mod['results'][0]['category_scores'][mod_type], 4)}"
-				return modfoo
+
+				response.raise_for_status()
+				result = await response.json()
+
+		modfoo = ""
+
+		for category, flagged in result["results"][0]["categories"].items():
+			if flagged:
+				score = result["results"][0]["category_scores"][category]
+				modfoo += f" | {category}: {round(score, 4)}"
+
+		return modfoo
 
 	async def send(self):
 		async with self._send_lock:
 			embed_list = self.embed_list.copy()
-			embed = discord.Embed(color=discord.Colour(0x7DD3FC if self.sex_str == "b" else 0xF9A8D4), description=self.assistant_msg.replace("`", r"\`"))
+
+			color = 0x7DD3FC if self.sex_str == "b" else 0xF9A8D4
+			embed = discord.Embed(
+				color=discord.Colour(color),
+				description=self.assistant_msg.replace("`", r"\`")
+			)
 			embed.set_author(name="ChatGPT")
+
 			if self.finish:
-				embed.set_footer(text=f'{self.model} | {self.completion_id} | tokens: {self.usage["total_tokens"]}({self.usage["prompt_tokens"]}/{self.usage["completion_tokens"]}) | {self.process_time}s{self.assistant_modfoo}')
+				usage = self.usage
+				embed.set_footer(
+					text=(
+						f"{self.model} | {self.completion_id} | "
+						f"tokens: {usage['total_tokens']}"
+						f"({usage['prompt_tokens']}/{usage['completion_tokens']}) | "
+						f"{self.process_time}s{self.assistant_modfoo}"
+					)
+				)
+
 			embed_list.append(embed)
 			self._last_sent = self.assistant_msg
+
 			if self.discord_msg is None:
 				if self.image_url:
-					self.discord_msg = await self.ctx.followup.send(embeds=embed_list, file=self.file, wait=True)
+					self.discord_msg = await self.ctx.followup.send(
+						embeds=embed_list,
+						file=self.file,
+						wait=True
+					)
 				else:
-					self.discord_msg = await self.ctx.followup.send(embeds=embed_list, wait=True)
+					self.discord_msg = await self.ctx.followup.send(
+						embeds=embed_list,
+						wait=True
+					)
 			else:
 				if self.image_url:
-					self.discord_msg = await self.discord_msg.edit(embeds=embed_list, attachments=self.file)
+					self.discord_msg = await self.discord_msg.edit(
+						embeds=embed_list,
+						attachments=self.file
+					)
 				else:
-					self.discord_msg = await self.discord_msg.edit(embeds=embed_list)
+					self.discord_msg = await self.discord_msg.edit(
+						embeds=embed_list
+					)
 
 class ChatGPT(commands.Cog):
-	chatgptcom = app_commands.Group(name='chatgpt',description="chat with chatgpt")
+	chatgptcom = app_commands.Group(
+		name="chatgpt",
+		description="chat with chatgpt"
+	)
 
 	def __init__(self, bot):
-		self.bot:commands.Bot = bot
+		self.bot: commands.Bot = bot
+
 		self.route_girl = {
 			"base_url": "scfw7zf2j7me4nvbra5zdy7i.agents.do-ai.run",
 			"token": config.chatgpt_girl_token
@@ -131,10 +211,18 @@ class ChatGPT(commands.Cog):
 			"base_url": "oxlzogl6d4b5dlkgvl275azi.agents.do-ai.run",
 			"token": config.chatgpt_boy_token
 		}
+
 		self.model = "gpt-3.5-turbo"
 		self.model_image = "dall-e-3"
 		self.chatgptchannel = config.chatgpt_channel
-		self.chatgptdb = sqlite3.connect(os.path.join(config.dir, 'database', 'chatgpt.db'), isolation_level=None)
+
+		database_path = os.path.join(
+			config.dir, "database", "chatgpt.db"
+		)
+		self.chatgptdb = sqlite3.connect(
+			database_path,
+			isolation_level=None
+		)
 
 	def num_tokens_from_messages(self, messages:list, model:str):
 		"""Return the number of tokens used by a list of messages."""
@@ -159,11 +247,24 @@ class ChatGPT(commands.Cog):
 		num_tokens += 3
 		return num_tokens
 
-	async def chat(self, message:dict, max_tokens:int, chatid:str | int, base_url:str, token:str, res_cls:GPTres) -> GPTres:
+	async def chat(
+		self,
+		message: list,
+		max_tokens: int,
+		chatid: str | int,
+		base_url: str,
+		token: str,
+		res_cls: GPTres
+	) -> GPTres:
+		chat_uuid = self.chatgptdb.execute(
+			"SELECT uuid FROM list WHERE id = ?",
+			(int(chatid),)
+		).fetchone()[0]
+
 		data = {
 			"messages": message,
 			"max_tokens": max_tokens,
-			"user": self.chatgptdb.execute('SELECT uuid FROM list WHERE id = ?', (int(chatid),)).fetchone()[0],
+			"user": chat_uuid,
 			"stream": True,
 			"stream_options": {
 				"include_usage": True
@@ -173,54 +274,92 @@ class ChatGPT(commands.Cog):
 			"Content-Type": "application/json",
 			"Authorization": f"Bearer {token}"
 		}
-		async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=610)) as s:
-			async with s.post(f"https://{base_url}/api/v1/chat/completions", data=json.dumps(data), headers=headers) as r:
-				if r.content_type != "text/event-stream" and r.status != 200:
-					response = await r.json()
-					logging.warning(f"AI Chat Request failed! | Data: {response}")
-					r.raise_for_status()
 
-				if r.content_type == "text/event-stream":
-					st = time.perf_counter()
+		timeout = aiohttp.ClientTimeout(total=610)
+		url = f"https://{base_url}/api/v1/chat/completions"
+
+		async with aiohttp.ClientSession(timeout=timeout) as session:
+			async with session.post(
+				url,
+				json=data,
+				headers=headers
+			) as response:
+				if response.content_type != "text/event-stream" and response.status != 200:
+					error = await response.json()
+					logging.warning("AI Chat Request failed! | Data: %s", error)
+					response.raise_for_status()
+
+				if response.content_type == "text/event-stream":
+					start_time = time.perf_counter()
+
 					while True:
-						raw_line = await r.content.readline()
+						raw_line = await response.content.readline()
 						line = raw_line.decode().strip()
+
 						if not line.startswith("data: "):
 							continue
 
-						data = line[6:]
-						if data == "[DONE]":
-							process_time = time.perf_counter() - st
+						event_data = line[6:]
+
+						if event_data == "[DONE]":
+							process_time = round(time.perf_counter() - start_time, 2)
+
 							try:
-								await res_cls.done(process_time=round(process_time, 2))
+								await res_cls.done(process_time=process_time)
 							except Exception as e:
-								logging.error(f"AI Chat Error at Done! | {e.__class__.__name__}: {e}")
-								await res_cls.ctx.followup.send(content=f"AI Chat Error at Done! | {e.__class__.__name__}: {e}", ephemeral=True)
+								logging.error(
+									"AI Chat Error at Done! | %s: %s",
+									e.__class__.__name__,
+									e
+								)
+								await res_cls.ctx.followup.send(
+									content=f"AI Chat Error at Done! | {e.__class__.__name__}: {e}",
+									ephemeral=True
+								)
+
 							return res_cls
-						obj = json.loads(data)
+
+						event = json.loads(event_data)
+
 						if res_cls.completion_id is None:
-							res_cls.completion_id = obj["id"]
-							res_cls.model = obj["model"]
-						if "usage" in obj:
-							res_cls.usage = obj["usage"]
-						else:
-							if not obj.get("choices"):
-								continue
-							if obj["choices"][0]["delta"].get("reasoning_content"):
-								res_cls.assistant_reasoning += obj["choices"][0]["delta"]["reasoning_content"]
-							if obj["choices"][0]["delta"].get("content"):
-								res_cls.assistant_msg += obj["choices"][0]["delta"]["content"]
-								if not res_cls.first_token.is_set():
-									res_cls.first_token.set()
+							res_cls.completion_id = event["id"]
+							res_cls.model = event["model"]
+
+						if "usage" in event:
+							res_cls.usage = event["usage"]
+							continue
+
+						if not event.get("choices"):
+							continue
+
+						delta = event["choices"][0]["delta"]
+
+						if delta.get("reasoning_content"):
+							res_cls.assistant_reasoning += delta["reasoning_content"]
+
+						if delta.get("content"):
+							res_cls.assistant_msg += delta["content"]
+
+							if not res_cls.first_token.is_set():
+								res_cls.first_token.set()
 
 				else:
-					obj = await r.json()
-					res_cls.completion_id = obj["id"]
-					res_cls.model = obj["model"]
-					res_cls.usage = obj["usage"]
-					res_cls.assistant_msg = obj["choices"][0]["message"]["content"]
-					res_cls.assistant_reasoning = obj["choices"][0]["message"]["reasoning_content"]
-					await res_cls.done(process_time=round(float(r.headers.get("x-process-time")), 2))
+					event = await response.json()
+
+					res_cls.completion_id = event["id"]
+					res_cls.model = event["model"]
+					res_cls.usage = event["usage"]
+
+					assistant = event["choices"][0]["message"]
+					res_cls.assistant_msg = assistant["content"]
+					res_cls.assistant_reasoning = assistant["reasoning_content"]
+
+					process_time = round(
+						float(response.headers.get("x-process-time")),
+						2
+					)
+					await res_cls.done(process_time=process_time)
+
 					return res_cls
 
 	def ischat(self, chatid:str | int) -> bool:
@@ -250,43 +389,76 @@ class ChatGPT(commands.Cog):
 		self.chatgptdb.commit()
 		return remain
 
-	def get_chat_data(self, chatid:str | int, message_id: int | None = None) -> tuple[list, int]:
-		msgid = self.chatgptdb.execute('SELECT msgid FROM list WHERE id = ?', (int(chatid),)).fetchone()[0]
-		with open(os.path.join(config.dir, 'data', 'chatgpt', str(chatid), "chat.json"), 'r') as f:
-			chat_log:list = json.load(f)
-			chat_data = []
-			for mess in chat_log:
-				if mess["id"] == 0:
-					mes = {
-						"role": "user",
-						"content":  f"Region: Japan\nTime Now: {datetime.now(tz=pytz.timezone('Asia/Tokyo')).isoformat(timespec='seconds')}\nNote: The time will be updated each time it is sent.\n\n{mess["system"]}"
-					}
-					chat_data.append(mes)
-					continue
-				mes = {
+	def get_chat_data(
+		self,
+		chatid: str | int,
+		message_id: int | None = None
+	) -> tuple[list, int]:
+		msgid = self.chatgptdb.execute(
+			"SELECT msgid FROM list WHERE id = ?",
+			(int(chatid),)
+		).fetchone()[0]
+
+		chat_path = os.path.join(
+			config.dir, "data", "chatgpt", str(chatid), "chat.json"
+		)
+
+		with open(chat_path, "r") as f:
+			chat_log = json.load(f)
+
+		chat_data = []
+
+		for message in chat_log:
+			if message["id"] == 0:
+				chat_data.append({
 					"role": "user",
-					"content": mess["user"]
-				}
-				if mess.get("image_url"):
-					state = uuid.uuid4().hex
-					state_time = int(datetime.now().timestamp())
-					state_hmac = hmac.new(bytes(config.secret, "UTF-8"), bytes(f"{state_time}-{state}", "UTF-8"), hashlib.sha256).hexdigest()
-					image_mes = {
-					 	"type": "image_url",
-						"image_url": {
-							"url": f"https://{config.domain}/api/chatgpt/images/{mess["image_url"]}?time={state_time}&state={state}&token={state_hmac}",
-							"detail": "high"
-						}
+					"content": (
+						"Region: Japan\n"
+						f"Time Now: {datetime.now(tz=pytz.timezone('Asia/Tokyo')).isoformat(timespec='seconds')}\n"
+						"Note: The time will be updated each time it is sent.\n\n"
+						f"{message['system']}"
+					)
+				})
+				continue
+
+			user_message = {
+				"role": "user",
+				"content": message["user"]
+			}
+
+			if message.get("image_url"):
+				state = uuid.uuid4().hex
+				timestamp = int(datetime.now().timestamp())
+				signature = hmac.new(
+					config.secret.encode("UTF-8"),
+					f"{timestamp}-{state}".encode("UTF-8"),
+					hashlib.sha256
+				).hexdigest()
+
+				image_url = (
+					f"https://{config.domain}/api/chatgpt/images/{message['image_url']}"
+					f"?time={timestamp}&state={state}&token={signature}"
+				)
+
+				image_message = {
+					"type": "image_url",
+					"image_url": {
+						"url": image_url,
+						"detail": "high"
 					}
-					mes["content"].append(image_mes)
-				chat_data.append(mes)
-				mes = {
-					"role": "assistant",
-					"content":  mess["assistant"],
 				}
-				chat_data.append(mes)
-				if message_id is not None and message_id == mess["id"]:
-					return chat_data, msgid
+
+				user_message["content"].append(image_message)
+
+			chat_data.append(user_message)
+			chat_data.append({
+				"role": "assistant",
+				"content": message["assistant"]
+			})
+
+			if message_id is not None and message_id == message["id"]:
+				return chat_data, msgid
+
 		return chat_data, msgid
 
 	@chatgptcom.command(name="model")
@@ -300,19 +472,41 @@ class ChatGPT(commands.Cog):
 		pass
 
 	@chatgptcom.command(name="generate")
-	async def generate(self, ctx:discord.Interaction, text:str, chatid:int = None, max_tokens:int = 8192, image_url:str = None):
+	async def generate(
+		self,
+		ctx: discord.Interaction,
+		text: str,
+		chatid: int = None,
+		max_tokens: int = 8192,
+		image_url: str = None
+	):
 		await ctx.response.defer(ephemeral=True)
+
 		if ctx.channel.id != self.chatgptchannel:
-			await ctx.followup.send("You can't use this command at this channel!", ephemeral=True)
+			await ctx.followup.send(
+				"You can't use this command at this channel!",
+				ephemeral=True
+			)
 			return
-		if max_tokens % 4 > 0:
-			await ctx.followup.send("Invalid max tokens number", ephemeral=True)
+
+		if max_tokens % 4 != 0:
+			await ctx.followup.send(
+				"Invalid max tokens number",
+				ephemeral=True
+			)
 			return
+
 		if chatid is None:
-			chatid = self.chatgptdb.execute('SELECT value FROM memo WHERE key = ?', ("last",)).fetchone()[0]
+			chatid = self.chatgptdb.execute(
+				"SELECT value FROM memo WHERE key = ?",
+				("last",)
+			).fetchone()[0]
+
 		if not self.ischat(chatid):
 			await ctx.followup.send("Chat not found!", ephemeral=True)
 			return
+
+		# 處理使用者提供的圖片
 		if image_url:
 			try:
 				image_id = await self.image_pend(image_url)
@@ -321,147 +515,290 @@ class ChatGPT(commands.Cog):
 				return
 		else:
 			image_id = None
+
 		await ctx.followup.send("Please wait...")
+
+		# 取得對話紀錄
 		chat_data, msgid = self.get_chat_data(chatid)
-		msg = {
+
+		user_message = {
 			"role": "user",
-			"content":  text
+			"content": text
 		}
+
 		if image_url:
 			state = uuid.uuid4().hex
 			state_time = int(datetime.now().timestamp())
-			state_hmac = hmac.new(bytes(config.secret, "UTF-8"), bytes(f"{state_time}-{state}", "UTF-8"), hashlib.sha256).hexdigest()
-			image_mes = {
+			state_hmac = hmac.new(
+				bytes(config.secret, "UTF-8"),
+				bytes(f"{state_time}-{state}", "UTF-8"),
+				hashlib.sha256
+			).hexdigest()
+
+			image_message = {
 				"type": "image_url",
 				"image_url": {
-					"url": f"https://{config.domain}/api/chatgpt/images/{image_id}?time={state_time}&state={state}&token={state_hmac}",
+					"url": (
+						f"https://{config.domain}/api/chatgpt/images/{image_id}"
+						f"?time={state_time}&state={state}&token={state_hmac}"
+					),
 					"detail": "high"
 				}
 			}
-			msg["content"].append(image_mes)
-		chat_data.append(msg)
+
+			user_message["content"].append(image_message)
+
+		chat_data.append(user_message)
+
+		# 呼叫 AI
+		msgid += 1
+		sex_str, sex_route = self.get_chat_sex(chatid)
+
+		res_cls = GPTres(
+			chatid=chatid,
+			msgid=msgid,
+			ctx=ctx,
+			user_msg=text,
+			image_id=image_id,
+			image_url=image_url,
+			sex_str=sex_str
+		)
+
 		try:
-			msgid += 1
-			sex_str, sex_route = self.get_chat_sex(chatid)
-			res_cls = GPTres(chatid=chatid, msgid=msgid, ctx=ctx, user_msg=text, image_id=image_id, image_url=image_url, sex_str=sex_str)
-			new_res_cls = await self.chat(message=chat_data, max_tokens=max_tokens, chatid=chatid, res_cls=res_cls, **sex_route)
-			self.chatgptdb.execute('UPDATE memo SET value = ? WHERE key = ?', (chatid, "last"))
-			self.chatgptdb.execute('UPDATE list SET msgid = ? WHERE id = ?', (msgid, int(chatid)))
-			self.chatgptdb.execute('UPDATE list SET last_time = ? WHERE id = ?', (int(datetime.now().timestamp()), int(chatid)))
-			self.chatgptdb.execute('UPDATE list SET last_msg = ? WHERE id = ?', (text, int(chatid)))
+			new_res_cls = await self.chat(
+				message=chat_data,
+				max_tokens=max_tokens,
+				chatid=chatid,
+				res_cls=res_cls,
+				**sex_route
+			)
+
+			# 更新資料庫
+			timestamp = int(datetime.now().timestamp())
+
+			self.chatgptdb.execute(
+				"UPDATE memo SET value = ? WHERE key = ?",
+				(chatid, "last")
+			)
+			self.chatgptdb.execute(
+				"UPDATE list SET msgid = ? WHERE id = ?",
+				(msgid, int(chatid))
+			)
+			self.chatgptdb.execute(
+				"UPDATE list SET last_time = ? WHERE id = ?",
+				(timestamp, int(chatid))
+			)
+			self.chatgptdb.execute(
+				"UPDATE list SET last_msg = ? WHERE id = ?",
+				(text, int(chatid))
+			)
 			self.chatgptdb.commit()
+
 		except aiohttp.ClientResponseError as e:
-			await ctx.followup.send(f"Request failed! {e.status}", ephemeral=True)
+			await ctx.followup.send(
+				f"Request failed! {e.status}",
+				ephemeral=True
+			)
 			return
+
 		except asyncio.TimeoutError:
-			await ctx.followup.send(f"Request failed! Connection time out", ephemeral=True)
+			await ctx.followup.send(
+				"Request failed! Connection time out",
+				ephemeral=True
+			)
 			return
+
 		finally:
 			if not res_cls.first_token.is_set():
 				res_cls.first_token.set()
 
-		with open(os.path.join(config.dir, 'data', 'chatgpt', str(chatid), "chat.json"), 'r+') as f:
+		# 儲存 chat.json
+		chat_path = os.path.join(
+			config.dir, "data", "chatgpt", str(chatid)
+		)
+
+		with open(os.path.join(chat_path, "chat.json"), "r+") as f:
 			chat_log = json.load(f)
-			msg = {
+
+			message = {
 				"id": msgid,
 				"user": text,
 				"assistant": new_res_cls.assistant_msg,
 				"reasoning": new_res_cls.assistant_reasoning,
 				"model": new_res_cls.model
 			}
+
 			if image_url:
-				msg["image_url"] = image_id
-			chat_log.append(msg)
+				message["image_url"] = image_id
+
+			chat_log.append(message)
+
 			f.seek(0)
 			json.dump(chat_log, f, ensure_ascii=False, indent=2)
 			f.truncate()
-		with open(os.path.join(config.dir, 'data', 'chatgpt', str(chatid), "all.json"), 'r+') as f:
+
+		# 儲存 all.json
+		with open(os.path.join(chat_path, "all.json"), "r+") as f:
 			all_log = json.load(f)
-			msg = {
+
+			all_log.append({
 				"role": "user",
 				"content": text
-			}
-			all_log.append(msg)
-			all_log.append(
-				{
-					"role": "assistant",
-					"content": new_res_cls.assistant_msg,
-					"reasoning_content": new_res_cls.assistant_reasoning
-				}
-			)
+			})
+			all_log.append({
+				"role": "assistant",
+				"content": new_res_cls.assistant_msg,
+				"reasoning_content": new_res_cls.assistant_reasoning
+			})
+
 			f.seek(0)
 			json.dump(all_log, f, ensure_ascii=False, indent=2)
 			f.truncate()
 
 	@chatgptcom.command(name="regenerate")
-	async def regenerate(self, ctx:discord.Interaction, chatid:int = None, max_tokens:int = 8192, message_id:int = None):
+	async def regenerate(
+		self,
+		ctx: discord.Interaction,
+		chatid: int = None,
+		max_tokens: int = 8192,
+		message_id: int = None
+	):
 		await ctx.response.defer(ephemeral=True)
+
 		if ctx.channel.id != self.chatgptchannel:
-			await ctx.followup.send("You can't use this command at this channel!", ephemeral=True)
+			await ctx.followup.send(
+				"You can't use this command at this channel!",
+				ephemeral=True
+			)
 			return
-		if max_tokens % 4 > 0:
-			await ctx.followup.send("Invalid max tokens number", ephemeral=True)
+
+		if max_tokens % 4 != 0:
+			await ctx.followup.send(
+				"Invalid max tokens number",
+				ephemeral=True
+			)
 			return
+
 		if chatid is None:
-			chatid = self.chatgptdb.execute('SELECT value FROM memo WHERE key = ?', ("last",)).fetchone()[0]
+			chatid = self.chatgptdb.execute(
+				"SELECT value FROM memo WHERE key = ?",
+				("last",)
+			).fetchone()[0]
+
 		if not self.ischat(chatid):
 			await ctx.followup.send("Chat not found!", ephemeral=True)
 			return
+
 		await ctx.followup.send("Please wait...")
-		chat_data, msgid = self.get_chat_data(chatid=chatid, message_id=message_id)
+
+		# 取得並截斷對話紀錄
+		chat_data, msgid = self.get_chat_data(
+			chatid=chatid,
+			message_id=message_id
+		)
+
 		log_len = len(chat_data)
+
 		if log_len == 3:
 			chat_data = chat_data[:2]
 		elif log_len > 3:
-			log_len -= 1
-			chat_data = chat_data[:log_len]
+			chat_data = chat_data[:log_len - 1]
 		else:
-			await ctx.followup.send("Cut chat log failed", ephemeral=True)
+			await ctx.followup.send(
+				"Cut chat log failed",
+				ephemeral=True
+			)
 			return
-		last_msg = chat_data[len(chat_data)-1]["content"]
+
+		last_msg = chat_data[-1]["content"]
+
+		# 呼叫 AI
+		sex_str, sex_route = self.get_chat_sex(chatid)
+
+		res_cls = GPTres(
+			chatid=chatid,
+			msgid=msgid,
+			ctx=ctx,
+			sex_str=sex_str
+		)
+
 		try:
-			sex_str, sex_route = self.get_chat_sex(chatid)
-			res_cls = GPTres(chatid=chatid, msgid=msgid, ctx=ctx, sex_str=sex_str)
-			new_res_cls = await self.chat(message=chat_data, max_tokens=max_tokens, chatid=chatid, res_cls=res_cls, **sex_route)
-			self.chatgptdb.execute('UPDATE memo SET value = ? WHERE key = ?', (chatid, "last"))
-			self.chatgptdb.execute('UPDATE list SET last_time = ? WHERE id = ?', (int(datetime.now().timestamp()), int(chatid)))
+			new_res_cls = await self.chat(
+				message=chat_data,
+				max_tokens=max_tokens,
+				chatid=chatid,
+				res_cls=res_cls,
+				**sex_route
+			)
+
+			# 更新資料庫
+			self.chatgptdb.execute(
+				"UPDATE memo SET value = ? WHERE key = ?",
+				(chatid, "last")
+			)
+			self.chatgptdb.execute(
+				"UPDATE list SET last_time = ? WHERE id = ?",
+				(int(datetime.now().timestamp()), int(chatid))
+			)
+
 			if message_id is None:
-				self.chatgptdb.execute('UPDATE list SET last_msg = ? WHERE id = ?', (last_msg, int(chatid)))
+				self.chatgptdb.execute(
+					"UPDATE list SET last_msg = ? WHERE id = ?",
+					(last_msg, int(chatid))
+				)
+
 			self.chatgptdb.commit()
+
 		except aiohttp.ClientResponseError as e:
-			await ctx.followup.send(f"Request failed! {e.status}", ephemeral=True)
+			await ctx.followup.send(
+				f"Request failed! {e.status}",
+				ephemeral=True
+			)
 			return
+
 		except asyncio.TimeoutError:
-			await ctx.followup.send(f"Request failed! Connection time out", ephemeral=True)
+			await ctx.followup.send(
+				"Request failed! Connection time out",
+				ephemeral=True
+			)
 			return
+
 		finally:
 			if not res_cls.first_token.is_set():
 				res_cls.first_token.set()
 
-		with open(os.path.join(config.dir, 'data', 'chatgpt', str(chatid), "chat.json"), 'r+') as f:
-			updated = False
+		chat_path = os.path.join(
+			config.dir, "data", "chatgpt", str(chatid)
+		)
+
+		# 更新 chat.json
+		with open(os.path.join(chat_path, "chat.json"), "r+") as f:
 			chat_log = json.load(f)
+
 			if message_id is not None:
-				for c in chat_log:
-					if c["id"] == message_id:
-						c["assistant"] = new_res_cls.assistant_msg
-						c["reasoning"] = new_res_cls.assistant_reasoning
-						updated = True
+				for message in chat_log:
+					if message["id"] == message_id:
+						message["assistant"] = new_res_cls.assistant_msg
+						message["reasoning"] = new_res_cls.assistant_reasoning
 						break
-			elif not updated:
-				len_chat = len(chat_log) - 1
-				chat_log[len_chat]["assistant"] = new_res_cls.assistant_msg
-				chat_log[len_chat]["reasoning"] = new_res_cls.assistant_reasoning
+			else:
+				chat_log[-1]["assistant"] = new_res_cls.assistant_msg
+				chat_log[-1]["reasoning"] = new_res_cls.assistant_reasoning
+
 			f.seek(0)
 			json.dump(chat_log, f, ensure_ascii=False, indent=2)
 			f.truncate()
-		with open(os.path.join(config.dir, 'data', 'chatgpt', str(chatid), "all.json"), 'r+') as f:
+
+		# 更新 all.json
+		with open(os.path.join(chat_path, "all.json"), "r+") as f:
 			all_log = json.load(f)
+
 			all_log.append({
-					"role": "assistant",
-					"content": new_res_cls.assistant_msg,
-					"reasoning_content": new_res_cls.assistant_reasoning
-				})
+				"role": "assistant",
+				"content": new_res_cls.assistant_msg,
+				"reasoning_content": new_res_cls.assistant_reasoning
+			})
+
 			f.seek(0)
 			json.dump(all_log, f, ensure_ascii=False, indent=2)
 			f.truncate()
@@ -523,28 +860,28 @@ class ChatGPT(commands.Cog):
 		await ctx.response.defer(ephemeral=True)
 		pass
 
-	async def image_pend(self, image_url:str):
-		if image_url.startswith("http"):
-			try:
-				async with aiohttp.ClientSession() as s:
-					async with s.get(image_url) as r:
-						r.raise_for_status()
-						raw_image = await r.read()
-						image = Image.open(BytesIO(raw_image))
-						image_id = uuid.uuid4().hex
-						image.save(os.path.join(config.dir, 'data', 'chatgpt', 'images', f'{image_id}.png'), format="PNG")
-						return image_id
-			except Exception as e:
-				raise ValueError("無法讀取圖片: ", e)
-		else:
-			try:
-				raw_image = base64.b64decode(image_url.split(",")[1])
-				image = Image.open(BytesIO(raw_image))
-				image_id = uuid.uuid4().hex
-				image.save(os.path.join(config.dir, 'data', 'chatgpt', 'images', f'{image_id}.png'), format="PNG")
-				return image_id
-			except Exception as e:
-				raise ValueError("無法讀取圖片: ", e)
+	async def image_pend(self, image_url: str):
+		try:
+			if image_url.startswith("http"):
+				async with aiohttp.ClientSession() as session:
+					async with session.get(image_url) as response:
+						response.raise_for_status()
+						image_data = await response.read()
+			else:
+				image_data = base64.b64decode(image_url.split(",")[1])
+
+			image = Image.open(BytesIO(image_data))
+			image_id = uuid.uuid4().hex
+
+			image_path = os.path.join(
+				config.dir, "data", "chatgpt", "images", f"{image_id}.png"
+			)
+			image.save(image_path, format="PNG")
+
+			return image_id
+
+		except Exception as e:
+			raise ValueError("無法讀取圖片: ", e)
 
 	def num_tokens_from_image(self, image_id:str):
 		with open(os.path.join(config.dir, 'data', 'chatgpt', 'images', f'{image_id}.png'), 'rb') as f:
