@@ -128,7 +128,7 @@ class GPTres:
 						e
 					)
 
-		await asyncio.sleep(1)
+			await asyncio.sleep(1)
 
 	async def fail(self):
 		self.failed = True
