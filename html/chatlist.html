@@ -79,6 +79,14 @@
 		background: #FFE4F1;
 		color: #EC4899;
 	}
+	.chat-id-c1 {
+		background: #DCFCE7;
+		color: #16A34A;
+	}
+	.chat-id-c2 {
+		background: #EDE9FE;
+		color: #8B5CF6;
+	}
 	.chat-preview {
 		font-size: 14px;
 		color: #666;
@@ -183,6 +191,14 @@
 		.chat-id-girl {
 			background: #5C2C4A;
 			color: #FFC4DD;
+		}
+		.chat-id-c1 {
+			background: #14532D;
+			color: #86EFAC;
+		}
+		.chat-id-c2 {
+			background: #4C1D95;
+			color: #C4B5FD;
 		}
 		.more-btn {
 			color:white;
@@ -431,10 +447,19 @@ fetch('/api/log/chatlist')
 	}
 
 	function getChatIdClass(chat) {
-		return chat.sex === "b"
-			? "chat-id chat-id-boy"
-			: "chat-id chat-id-girl";
-	}
+  switch (chat.sex) {
+    case "b":
+      return "chat-id chat-id-boy";
+    case "g":
+      return "chat-id chat-id-girl";
+    case "c1":
+      return "chat-id chat-id-c1";
+    case "c2":
+      return "chat-id chat-id-c2";
+    default:
+      return "chat-id";
+  }
+}
 
 	document.addEventListener("click", () => {
 	document.querySelectorAll(".menu").forEach(m => {
