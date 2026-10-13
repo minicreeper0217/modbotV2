@@ -48,6 +48,8 @@ class GPTres:
 
 		self.usage = None
 		self.finish = False
+		self.failed = False
+
 		self.model = None
 		self.completion_id = None
 		self.process_time = 0
@@ -58,6 +60,7 @@ class GPTres:
 
 		self.embed_list = []
 		self.discord_msg = None
+		self.file = None
 
 		self.first_token = asyncio.Event()
 		self._send_lock = asyncio.Lock()
@@ -67,27 +70,38 @@ class GPTres:
 			self.user_msg = user_msg
 
 			embed = discord.Embed(
-				color=discord.Colour(0x86EFAC),
+				color=discord.Colour(self.color),
 				description=self.user_msg
 			)
+
 			embed.set_author(
 				name=ctx.user.display_name,
 				icon_url=ctx.user.avatar.url
 			)
+
 			embed.set_footer(
 				text=f"ChatID: {self.chatid} | MessageID: {self.msgid}"
 			)
 
 			if image_url:
 				file_name = f"{uuid.uuid4().hex}.png"
+
 				image_path = os.path.join(
-					config.dir, "data", "chatgpt", "images", f"{image_id}.png"
+					config.dir,
+					"data",
+					"chatgpt",
+					"images",
+					f"{image_id}.png"
 				)
 
-				self.file = discord.File(image_path, filename=file_name)
-				embed.set_image(url=f"attachment://{file_name}.png")
-			else:
-				self.file = None
+				self.file = discord.File(
+					image_path,
+					filename=file_name
+				)
+
+				embed.set_image(
+					url=f"attachment://{file_name}"
+				)
 
 			self.embed_list.append(embed)
 
@@ -97,17 +111,39 @@ class GPTres:
 		await self.first_token.wait()
 
 		while not self.finish:
-			if self.assistant_msg and self.assistant_msg != self._last_sent:
+
+			if self.failed:
+				break
+
+			if (
+				self.assistant_msg
+				and self.assistant_msg != self._last_sent
+			):
 				try:
 					await self.send()
-				except discord.HTTPException as e:
-					logging.warning("Discord edit failed: %s", e)
 
-			await asyncio.sleep(1)
+				except discord.HTTPException as e:
+					logging.warning(
+						"Discord edit failed: %s",
+						e
+					)
+
+		await asyncio.sleep(1)
+
+	async def fail(self):
+		self.failed = True
+		self.finish = True
+
+		if not self.first_token.is_set():
+			self.first_token.set()
 
 	async def done(self, process_time: float):
 		self.process_time = process_time
-		self.assistant_modfoo = await self.moderation(self.assistant_msg)
+
+		self.assistant_modfoo = await self.moderation(
+			self.assistant_msg
+		)
+
 		self.finish = True
 
 		if not self.first_token.is_set():
@@ -157,13 +193,23 @@ class GPTres:
 			embed.set_author(name="ChatGPT")
 
 			if self.finish:
-				usage = self.usage
+
+				if self.usage:
+					usage_text = (
+						f"tokens: {self.usage['total_tokens']}"
+						f"({self.usage['prompt_tokens']}/"
+						f"{self.usage['completion_tokens']})"
+					)
+				else:
+					usage_text = "tokens: unknown"
+
 				embed.set_footer(
 					text=(
-						f"{self.model} | {self.completion_id} | "
-						f"tokens: {usage['total_tokens']}"
-						f"({usage['prompt_tokens']}/{usage['completion_tokens']}) | "
-						f"{self.process_time}s{self.assistant_modfoo}"
+						f"{self.model} | "
+						f"{self.completion_id} | "
+						f"{usage_text} | "
+						f"{self.process_time}s"
+						f"{self.assistant_modfoo or ''}"
 					)
 				)
 
@@ -203,7 +249,7 @@ class ChatGPT(commands.Cog):
 		self.bot: commands.Bot = bot
 
 		self.route_openai = {
-  		"token": config.chatgpt_moderations
+			"token": config.chatgpt_moderations
 		}
 
 		self.route_girl = {
@@ -394,7 +440,6 @@ class ChatGPT(commands.Cog):
 		max_tokens: int,
 		chatid: str | int,
 		instructions: str,
-		model: str,
 		res_cls: GPTres
 	) -> GPTres:
 		chat_uuid = self.chatgptdb.execute(
@@ -403,7 +448,7 @@ class ChatGPT(commands.Cog):
 		).fetchone()[0]
 
 		data = {
-			"model": model,
+			"model": self.model,
 			"instructions": instructions,
 			"input": message,
 			"max_output_tokens": max_tokens,
@@ -608,6 +653,7 @@ class ChatGPT(commands.Cog):
 		await ctx.response.defer(ephemeral=True)
 		pass
 
+
 	@chatgptcom.command(name="generate")
 	async def generate(
 		self,
@@ -626,7 +672,7 @@ class ChatGPT(commands.Cog):
 			)
 			return
 
-		if max_tokens % 4 != 0:
+		if max_tokens % 4 != 0 or max_tokens <= 0:
 			await ctx.followup.send(
 				"Invalid max tokens number",
 				ephemeral=True
@@ -643,7 +689,9 @@ class ChatGPT(commands.Cog):
 			await ctx.followup.send("Chat not found!", ephemeral=True)
 			return
 
-		# 處理使用者提供的圖片
+		chat_config = self.get_chat_config(chatid)
+
+		# 處理圖片
 		if image_url:
 			try:
 				image_id = await self.image_pend(image_url)
@@ -666,33 +714,51 @@ class ChatGPT(commands.Cog):
 			"content": text
 		}
 
-		if image_url:
+		if image_id:
 			state = uuid.uuid4().hex
-			state_time = int(datetime.now().timestamp())
-			state_hmac = hmac.new(
-				bytes(config.secret, "UTF-8"),
-				bytes(f"{state_time}-{state}", "UTF-8"),
+			timestamp = int(datetime.now().timestamp())
+
+			signature = hmac.new(
+				config.secret.encode("UTF-8"),
+				f"{timestamp}-{state}".encode("UTF-8"),
 				hashlib.sha256
 			).hexdigest()
 
-			image_message = {
-				"type": "image_url",
-				"image_url": {
-					"url": (
-						f"https://{config.domain}/api/chatgpt/images/{image_id}"
-						f"?time={state_time}&state={state}&token={state_hmac}"
-					),
-					"detail": "high"
-				}
-			}
+			signed_url = (
+				f"https://{config.domain}/api/chatgpt/images/{image_id}"
+				f"?time={timestamp}&state={state}&token={signature}"
+			)
 
-			user_message["content"].append(image_message)
+			if chat_config["api"] == "responses":
+				user_message["content"] = [
+					{
+						"type": "input_text",
+						"text": text
+					},
+					{
+						"type": "input_image",
+						"image_url": signed_url
+					}
+				]
+			else:
+				user_message["content"] = [
+					{
+						"type": "text",
+						"text": text
+					},
+					{
+						"type": "image_url",
+						"image_url": {
+							"url": signed_url,
+							"detail": "high"
+						}
+					}
+				]
 
 		chat_data.append(user_message)
 
-		# 呼叫 AI
+		# 建立回覆物件
 		msgid += 1
-		chat_config = self.get_chat_config(chatid)
 
 		res_cls = GPTres(
 			chatid=chatid,
@@ -701,9 +767,10 @@ class ChatGPT(commands.Cog):
 			user_msg=text,
 			image_id=image_id,
 			image_url=image_url,
-			color=chat_config["color"],
+			color=chat_config["color"]
 		)
 
+		# 呼叫 AI
 		try:
 			if chat_config["api"] == "responses":
 				new_res_cls = await self.chat_responses(
@@ -722,51 +789,52 @@ class ChatGPT(commands.Cog):
 					**chat_config["route"]
 				)
 
-			# 更新資料庫
-			timestamp = int(datetime.now().timestamp())
+		except Exception as e:
+			res_cls.finish = True
+			res_cls.first_token.set()
 
-			self.chatgptdb.execute(
-				"UPDATE memo SET value = ? WHERE key = ?",
-				(chatid, "last")
+			logging.exception(
+				"AI Chat Request failed | ChatID: %s",
+				chatid
 			)
-			self.chatgptdb.execute(
-				"UPDATE list SET msgid = ? WHERE id = ?",
-				(msgid, int(chatid))
-			)
-			self.chatgptdb.execute(
-				"UPDATE list SET last_time = ? WHERE id = ?",
-				(timestamp, int(chatid))
-			)
-			self.chatgptdb.execute(
-				"UPDATE list SET last_msg = ? WHERE id = ?",
-				(text, int(chatid))
-			)
-			self.chatgptdb.commit()
 
-		except aiohttp.ClientResponseError as e:
 			await ctx.followup.send(
-				f"Request failed! {e.status}",
+				f"Request failed! {type(e).__name__}: {e}",
 				ephemeral=True
 			)
 			return
 
-		except asyncio.TimeoutError:
-			await ctx.followup.send(
-				"Request failed! Connection time out",
-				ephemeral=True
-			)
-			return
+		# 更新資料庫
+		timestamp = int(datetime.now().timestamp())
 
-		finally:
-			if not res_cls.first_token.is_set():
-				res_cls.first_token.set()
+		self.chatgptdb.execute(
+			"UPDATE memo SET value = ? WHERE key = ?",
+			(chatid, "last")
+		)
+		self.chatgptdb.execute(
+			"UPDATE list SET msgid = ? WHERE id = ?",
+			(msgid, int(chatid))
+		)
+		self.chatgptdb.execute(
+			"UPDATE list SET last_time = ? WHERE id = ?",
+			(timestamp, int(chatid))
+		)
+		self.chatgptdb.execute(
+			"UPDATE list SET last_msg = ? WHERE id = ?",
+			(text, int(chatid))
+		)
+		self.chatgptdb.commit()
 
 		# 儲存 chat.json
 		chat_path = os.path.join(
 			config.dir, "data", "chatgpt", str(chatid)
 		)
 
-		with open(os.path.join(chat_path, "chat.json"), "r+") as f:
+		with open(
+			os.path.join(chat_path, "chat.json"),
+			"r+",
+			encoding="UTF-8"
+		) as f:
 			chat_log = json.load(f)
 
 			message = {
@@ -777,7 +845,7 @@ class ChatGPT(commands.Cog):
 				"model": new_res_cls.model
 			}
 
-			if image_url:
+			if image_id:
 				message["image_url"] = image_id
 
 			chat_log.append(message)
@@ -787,7 +855,11 @@ class ChatGPT(commands.Cog):
 			f.truncate()
 
 		# 儲存 all.json
-		with open(os.path.join(chat_path, "all.json"), "r+") as f:
+		with open(
+			os.path.join(chat_path, "all.json"),
+			"r+",
+			encoding="UTF-8"
+		) as f:
 			all_log = json.load(f)
 
 			all_log.append({
@@ -803,6 +875,7 @@ class ChatGPT(commands.Cog):
 			f.seek(0)
 			json.dump(all_log, f, ensure_ascii=False, indent=2)
 			f.truncate()
+
 
 	@chatgptcom.command(name="regenerate")
 	async def regenerate(
@@ -821,7 +894,7 @@ class ChatGPT(commands.Cog):
 			)
 			return
 
-		if max_tokens % 4 != 0:
+		if max_tokens % 4 != 0 or max_tokens <= 0:
 			await ctx.followup.send(
 				"Invalid max tokens number",
 				ephemeral=True
@@ -835,42 +908,55 @@ class ChatGPT(commands.Cog):
 			).fetchone()[0]
 
 		if not self.ischat(chatid):
-			await ctx.followup.send("Chat not found!", ephemeral=True)
+			await ctx.followup.send(
+				"Chat not found!",
+				ephemeral=True
+			)
 			return
+
+		chat_config = self.get_chat_config(chatid)
 
 		await ctx.followup.send("Please wait...")
 
-		# 取得並截斷對話紀錄
 		chat_data, msgid = self.get_chat_data(
 			chatid,
 			message_id=message_id,
 			api=chat_config["api"]
 		)
 
-		log_len = len(chat_data)
-
-		if log_len == 3:
-			chat_data = chat_data[:2]
-		elif log_len > 3:
-			chat_data = chat_data[:log_len - 1]
-		else:
+		# 移除最後的 assistant 回覆
+		if len(chat_data) <= 1:
 			await ctx.followup.send(
 				"Cut chat log failed",
 				ephemeral=True
 			)
 			return
 
-		last_msg = chat_data[-1]["content"]
+		if chat_data[-1]["role"] == "assistant":
+			chat_data.pop()
 
-		# 呼叫 AI
-		chat_config = self.get_chat_config(chatid)
+		last_msg = None
+
+		for message in reversed(chat_data):
+			if message["role"] == "user":
+				last_msg = message["content"]
+				break
+
+		if last_msg is None:
+			await ctx.followup.send(
+				"User message not found",
+				ephemeral=True
+			)
+			return
+
 
 		res_cls = GPTres(
 			chatid=chatid,
 			msgid=msgid,
 			ctx=ctx,
-			 color=chat_config["color"],
+			color=chat_config["color"]
 		)
+
 
 		try:
 			if chat_config["api"] == "responses":
@@ -890,66 +976,101 @@ class ChatGPT(commands.Cog):
 					**chat_config["route"]
 				)
 
-			# 更新資料庫
-			self.chatgptdb.execute(
-				"UPDATE memo SET value = ? WHERE key = ?",
-				(chatid, "last")
+		except Exception as e:
+			res_cls.finish = True
+			res_cls.first_token.set()
+
+			logging.exception(
+				"AI Regenerate failed | ChatID: %s",
+				chatid
 			)
-			self.chatgptdb.execute(
-				"UPDATE list SET last_time = ? WHERE id = ?",
-				(int(datetime.now().timestamp()), int(chatid))
-			)
 
-			if message_id is None:
-				self.chatgptdb.execute(
-					"UPDATE list SET last_msg = ? WHERE id = ?",
-					(last_msg, int(chatid))
-				)
-
-			self.chatgptdb.commit()
-
-		except aiohttp.ClientResponseError as e:
 			await ctx.followup.send(
-				f"Request failed! {e.status}",
+				f"Request failed! {type(e).__name__}: {e}",
 				ephemeral=True
 			)
 			return
 
-		except asyncio.TimeoutError:
-			await ctx.followup.send(
-				"Request failed! Connection time out",
-				ephemeral=True
-			)
-			return
 
-		finally:
-			if not res_cls.first_token.is_set():
-				res_cls.first_token.set()
-
-		chat_path = os.path.join(
-			config.dir, "data", "chatgpt", str(chatid)
+		# 更新資料庫
+		self.chatgptdb.execute(
+			"UPDATE memo SET value = ? WHERE key = ?",
+			(chatid, "last")
 		)
 
+		self.chatgptdb.execute(
+			"UPDATE list SET last_time = ? WHERE id = ?",
+			(
+				int(datetime.now().timestamp()),
+				int(chatid)
+			)
+		)
+
+		if message_id is None:
+			self.chatgptdb.execute(
+				"UPDATE list SET last_msg = ? WHERE id = ?",
+				(last_msg, int(chatid))
+			)
+
+		self.chatgptdb.commit()
+
+
+		chat_path = os.path.join(
+			config.dir,
+			"data",
+			"chatgpt",
+			str(chatid)
+		)
+
+
 		# 更新 chat.json
-		with open(os.path.join(chat_path, "chat.json"), "r+") as f:
+		with open(
+			os.path.join(chat_path, "chat.json"),
+			"r+",
+			encoding="UTF-8"
+		) as f:
 			chat_log = json.load(f)
+
+			target = None
 
 			if message_id is not None:
 				for message in chat_log:
 					if message["id"] == message_id:
-						message["assistant"] = new_res_cls.assistant_msg
-						message["reasoning"] = new_res_cls.assistant_reasoning
+						target = message
 						break
 			else:
-				chat_log[-1]["assistant"] = new_res_cls.assistant_msg
-				chat_log[-1]["reasoning"] = new_res_cls.assistant_reasoning
+				target = chat_log[-1]
+
+
+			if target is None:
+				await ctx.followup.send(
+					"Message not found",
+					ephemeral=True
+				)
+				return
+
+
+			target["assistant"] = new_res_cls.assistant_msg
+			target["reasoning"] = new_res_cls.assistant_reasoning
+			target["model"] = new_res_cls.model
+
 
 			f.seek(0)
-			json.dump(chat_log, f, ensure_ascii=False, indent=2)
+			json.dump(
+				chat_log,
+				f,
+				ensure_ascii=False,
+				indent=2
+			)
 			f.truncate()
 
+
 		# 更新 all.json
-		with open(os.path.join(chat_path, "all.json"), "r+") as f:
+		with open(
+			os.path.join(chat_path, "all.json"),
+			"r+",
+			encoding="UTF-8"
+		) as f:
 			all_log = json.load(f)
 
 			all_log.append({
@@ -959,7 +1080,12 @@ class ChatGPT(commands.Cog):
 			})
 
 			f.seek(0)
-			json.dump(all_log, f, ensure_ascii=False, indent=2)
+			json.dump(
+				all_log,
+				f,
+				ensure_ascii=False,
+				indent=2
+			)
 			f.truncate()
 
 	@chatgptcom.command(name="create")
