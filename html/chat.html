@@ -31,7 +31,7 @@
     .message-content td, .message-content th { border: 1px solid #ccc; padding: 6px; }
     .message-content blockquote { border-left: 4px solid #ccc; margin: 8px 0; padding: 4px 12px; }
     .user-image { max-width: 100%; height: auto; }
-    .edit-textarea { display: block; box-sizing: border-box; width: 100%; min-height: 80px; max-height: 50vh; resize: vertical; font: 16px/1.5 inherit; padding: 8px; margin-top: 6px; }
+    .edit-textarea { display: block; box-sizing: border-box; width: 100%; min-height: 80px; max-height: 50vh; resize: vertical; font-size: 16px; line-height: 1.5; font-family: inherit; padding: 8px; margin-top: 6px; }
     .edit-actions { display: flex; gap: 8px; margin: 6px 0; }
     .reasoning, .tool-history { margin: 12px 0; border: 1px solid #ccc; border-radius: 5px; padding: 8px; }
     summary { cursor: pointer; font-weight: bold; }
@@ -96,6 +96,22 @@
       } catch { return '（參數無法解析，為避免洩露檔案內容而隱藏）'; }
     }
 
+    function toolOutput(call, output) {
+      if (call.name !== 'github_read_file') return readable(output);
+      if (output === '(deleted)') return '（內容已刪除）';
+      try {
+        const result = typeof output === 'string' ? JSON.parse(output) : output;
+        if (!result || typeof result !== 'object' || Array.isArray(result)) {
+          return '（結果格式無法解析，已隱藏）';
+        }
+        // 只在畫面隱藏 content，不改動原本儲存的聊天紀錄。
+        if (Object.prototype.hasOwnProperty.call(result, 'content')) {
+          return JSON.stringify({ ...result, content: '（檔案內容已隱藏）' }, null, 2);
+        }
+        return JSON.stringify(result, null, 2);
+      } catch { return '（結果格式無法解析，已隱藏）'; }
+    }
+
     function renderToolHistory(entry) {
       const items = Array.isArray(entry.response_items) ? entry.response_items : [];
       const calls = items.filter(item => item && item.type === 'function_call');
@@ -117,7 +133,7 @@
         block.appendChild(element('pre', 'tool-data', toolArguments(call)));
         block.appendChild(element('div', 'tool-label', '結果'));
         if (outputs.has(call.call_id)) {
-          block.appendChild(element('pre', 'tool-data', readable(outputs.get(call.call_id))));
+          block.appendChild(element('pre', 'tool-data', toolOutput(call, outputs.get(call.call_id))));
         } else {
           block.appendChild(element('div', 'missing-output', '沒有找到對應的工具結果'));
         }
