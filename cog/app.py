@@ -1088,18 +1088,18 @@ class APP(commands.Cog):
 		else:
 			return web.Response(status=404,text="")
 
-	async def chat_file(request: web.Request, file_id: str):
+	async def chat_file(self, request: web.Request, file_id: str):
 		expires = request.query.get("expires", "")
 		state = request.query.get("state", "")
 		token = request.query.get("token", "")
 
 		# 檢查參數
 		if not expires.isdigit() or not state or not token:
-			raise web.HTTPForbidden()
+			return web.Response(status=403,text="")
 
 		# 檢查檔案 ID 格式
 		if len(file_id) != 32 or not all(c in "0123456789abcdef" for c in file_id):
-			raise web.HTTPNotFound()
+			return web.Response(status=404,text="")
 
 		# 取得資料庫紀錄
 		database_path = config.dir / "database" / "chatgpt.db"
@@ -1111,17 +1111,17 @@ class APP(commands.Cog):
 			).fetchone()
 
 		if row is None:
-			raise web.HTTPNotFound()
+			return web.Response(status=404,text="")
 
 		filename, expires_at = row
 
 		# 檢查有效期限
 		if int(datetime.datetime.now()) >= expires_at:
-			raise web.HTTPGone(text="File expired")
+			return web.Response(status=410,text="File expired")
 
 		# URL 的到期時間必須與資料庫一致
 		if int(expires) != expires_at:
-			raise web.HTTPForbidden()
+			return web.Response(status=403,text="")
 
 		# 驗證 HMAC 簽名
 		expected_token = hmac.new(
@@ -1131,13 +1131,13 @@ class APP(commands.Cog):
 		).hexdigest()
 
 		if not hmac.compare_digest(token, expected_token):
-			raise web.HTTPForbidden()
+			return web.Response(status=403,text="")
 
 		# 找出檔案
 		file_path = config.dir / "data" / "chatgpt" / "files" / file_id
 
 		if not file_path.is_file():
-			raise web.HTTPNotFound()
+			return web.Response(status=404,text="")
 
 		# 回傳檔案
 		return web.FileResponse(
