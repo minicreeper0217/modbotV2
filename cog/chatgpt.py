@@ -680,8 +680,6 @@ class ChatGPT(commands.Cog):
 					if persist_history:
 						self.sync_deleted_outputs(chatid, deleted_ids)
 
-				self.cleanup_save_file_calls(inputs)
-
 		raise RuntimeError("Tool execution loop ended unexpectedly")
 
 	def ischat(self, chatid: str | int) -> bool:
