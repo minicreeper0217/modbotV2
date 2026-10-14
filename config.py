@@ -71,6 +71,8 @@ chatgpt_moderations = os.environ["CHATGPT_MODERATIONS"]
 
 chatgpt_user = os.environ["CHATGPT_USER"]
 
+github_token = os.environ["GITHUB_TOKEN"]
+
 bot_public_key = os.environ["BOT_PUBLIC_KEY"]
 
 bot_auth_secret = os.environ["BOT_AUTH_SECRET"]

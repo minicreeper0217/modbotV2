@@ -87,6 +87,10 @@
 		background: #EDE9FE;
 		color: #8B5CF6;
 	}
+	.chat-id-c3 {
+  	background: #FEF3C7;
+  	color: #B45309;
+	}
 	.chat-preview {
 		font-size: 14px;
 		color: #666;
@@ -200,6 +204,10 @@
 			background: #4C1D95;
 			color: #C4B5FD;
 		}
+		.chat-id-c3 {
+  		background: #78350F;
+  		color: #FBBF24;
+		}
 		.more-btn {
 			color:white;
 		}
@@ -298,7 +306,7 @@ fetch('/api/log/chatlist')
 
 				oldChatTop.innerHTML =
 					'<div class="chat-title">' +
-					'<span class="' + getChatIdClass(chat) + '">#' + oldData.id + '</span>'
+					'<span class="' + getChatIdClass(chat) + '">#' + oldData.id + '</span>' +
 					oldData.title + '</div>' +
 					'<div class="chat-time">' +
 					(oldData.time ? formatTime(oldData.time) : '') +
@@ -456,6 +464,8 @@ fetch('/api/log/chatlist')
       return "chat-id chat-id-c1";
     case "c2":
       return "chat-id chat-id-c2";
+		case "c3":
+  		return "chat-id chat-id-c3";
     default:
       return "chat-id chat-id-girl";
   }

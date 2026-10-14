@@ -8,7 +8,7 @@ import jinja2
 import asyncio
 import logging
 import logging.handlers
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, quote
 import config
 import os
 import json
@@ -323,6 +323,8 @@ class APP(commands.Cog):
 						return await self.chat_log(request, chatid)
 					case ["chat-images", image_id]:
 						return await self.chat_image(request, image_id)
+					case ["chat-files", file_id]:
+						return await self.chat_file(request, file_id)
 					case ["chatlist", chatid]:
 						return await self.chat_op(request, chatid)
 					case ["subscription-list"]:
@@ -1085,6 +1087,68 @@ class APP(commands.Cog):
 				return web.Response(status=200,body=image_data, content_type="image/png")
 		else:
 			return web.Response(status=404,text="")
+
+	async def chat_file(request: web.Request, file_id: str):
+		expires = request.query.get("expires", "")
+		state = request.query.get("state", "")
+		token = request.query.get("token", "")
+
+		# 檢查參數
+		if not expires.isdigit() or not state or not token:
+			raise web.HTTPForbidden()
+
+		# 檢查檔案 ID 格式
+		if len(file_id) != 32 or not all(c in "0123456789abcdef" for c in file_id):
+			raise web.HTTPNotFound()
+
+		# 取得資料庫紀錄
+		database_path = config.dir / "database" / "chatgpt.db"
+
+		with sqlite3.connect(database_path) as db:
+			row = db.execute(
+				"SELECT filename, expires_at FROM files WHERE id = ?",
+				(file_id,)
+			).fetchone()
+
+		if row is None:
+			raise web.HTTPNotFound()
+
+		filename, expires_at = row
+
+		# 檢查有效期限
+		if int(datetime.datetime.now()) >= expires_at:
+			raise web.HTTPGone(text="File expired")
+
+		# URL 的到期時間必須與資料庫一致
+		if int(expires) != expires_at:
+			raise web.HTTPForbidden()
+
+		# 驗證 HMAC 簽名
+		expected_token = hmac.new(
+			config.secret.encode("UTF-8"),
+			f"{file_id}-{expires_at}-{state}".encode("UTF-8"),
+			hashlib.sha256
+		).hexdigest()
+
+		if not hmac.compare_digest(token, expected_token):
+			raise web.HTTPForbidden()
+
+		# 找出檔案
+		file_path = config.dir / "data" / "chatgpt" / "files" / file_id
+
+		if not file_path.is_file():
+			raise web.HTTPNotFound()
+
+		# 回傳檔案
+		return web.FileResponse(
+			path=file_path,
+			headers={
+				"Content-Disposition": (
+					f"attachment; filename*=UTF-8''{quote(filename)}"
+				),
+				"Cache-Control": "private, no-store"
+			}
+		)
 
 	@routes.route(path="/subscription/{path:.*}", method="GET")
 	async def subscription(self, request:web.Request):

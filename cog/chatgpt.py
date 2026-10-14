@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import copy
 import hashlib
 import hmac
 import io
@@ -13,6 +14,8 @@ import uuid
 
 from datetime import datetime
 from io import BytesIO
+from pathlib import Path
+from urllib.parse import urlencode
 
 import aiohttp
 import discord
@@ -26,129 +29,84 @@ from discord.ext import commands
 from PIL import Image
 
 import config
+from github import GitHub
+
 
 tz = pytz.timezone("Asia/Taipei")
 
+
 class GPTres:
-	def __init__(
-		self,
-		chatid,
-		msgid,
-		ctx: discord.Interaction,
-		color,
-		image_url=None,
-		image_id=None,
-		user_msg=None
-	):
+	def __init__(self, chatid, msgid, ctx: discord.Interaction, color,
+							 image_url=None, image_id=None, user_msg=None):
 		self.chatid = chatid
 		self.msgid = msgid
 		self.ctx = ctx
 		self.color = color
 		self.image_url = image_url
-
 		self.usage = None
 		self.finish = False
 		self.failed = False
-
 		self.model = None
 		self.completion_id = None
 		self.process_time = 0
 		self.assistant_modfoo = None
-
 		self.assistant_msg = ""
 		self.assistant_reasoning = ""
-
+		self.response_items = []
+		self.deleted_call_ids = set()
 		self.embed_list = []
 		self.discord_msg = None
 		self.file = None
-
 		self.first_token = asyncio.Event()
 		self._send_lock = asyncio.Lock()
 		self._last_sent = ""
 
 		if user_msg:
 			self.user_msg = user_msg
-
 			embed = discord.Embed(
 				color=discord.Colour(self.color),
-				description=self.user_msg
+				description=self.user_msg[:1900]
 			)
-
 			embed.set_author(
 				name=ctx.user.display_name,
-				icon_url=ctx.user.avatar.url
+				icon_url=ctx.user.display_avatar.url
 			)
-
-			embed.set_footer(
-				text=f"ChatID: {self.chatid} | MessageID: {self.msgid}"
-			)
-
+			embed.set_footer(text=f"ChatID: {self.chatid} | MessageID: {self.msgid}")
 			if image_url:
 				file_name = f"{uuid.uuid4().hex}.png"
-
-				image_path = os.path.join(
-					config.dir,
-					"data",
-					"chatgpt",
-					"images",
-					f"{image_id}.png"
-				)
-
-				self.file = discord.File(
-					image_path,
-					filename=file_name
-				)
-
-				embed.set_image(
-					url=f"attachment://{file_name}"
-				)
-
+				image_path = os.path.join(config.dir, "data", "chatgpt", "images", f"{image_id}.png")
+				self.file = discord.File(image_path, filename=file_name)
+				embed.set_image(url=f"attachment://{file_name}")
 			self.embed_list.append(embed)
 
-		asyncio.create_task(self.pending())
+		self._pending_task = asyncio.create_task(self.pending())
 
 	async def pending(self):
 		await self.first_token.wait()
-
 		while not self.finish:
-
 			if self.failed:
 				break
-
-			if (
-				self.assistant_msg
-				and self.assistant_msg != self._last_sent
-			):
+			if self.assistant_msg and self.assistant_msg != self._last_sent:
 				try:
 					await self.send()
-
 				except discord.HTTPException as e:
-					logging.warning(
-						"Discord edit failed: %s",
-						e
-					)
-
+					logging.warning("Discord edit failed: %s", e)
 			await asyncio.sleep(1)
 
 	async def fail(self):
 		self.failed = True
 		self.finish = True
-
-		if not self.first_token.is_set():
-			self.first_token.set()
+		self.first_token.set()
 
 	async def done(self, process_time: float):
 		self.process_time = process_time
-
-		self.assistant_modfoo = await self.moderation(
-			self.assistant_msg
-		)
-
+		try:
+			self.assistant_modfoo = await self.moderation(self.assistant_msg) if self.assistant_msg else ""
+		except Exception:
+			logging.exception("AI moderation failed")
+			self.assistant_modfoo = ""
 		self.finish = True
-
-		if not self.first_token.is_set():
-			self.first_token.set()
-
+		self.first_token.set()
 		await self.send()
 
 	async def moderation(self, text: str) -> str:
@@ -156,109 +114,70 @@ class GPTres:
 			"Content-Type": "application/json",
 			"Authorization": f"Bearer {config.chatgpt_moderations}"
 		}
-		data = {
-			"model": "omni-moderation-latest",
-			"input": text
-		}
-
-		async with aiohttp.ClientSession() as session:
-			async with session.post(
-				"https://api.openai.com/v1/moderations",
-				json=data,
-				headers=headers
-			) as response:
+		data = {"model": "omni-moderation-latest", "input": text}
+		async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
+			async with session.post("https://api.openai.com/v1/moderations", json=data, headers=headers) as response:
 				if response.status == 429:
 					return ""
-
 				response.raise_for_status()
 				result = await response.json()
-
 		modfoo = ""
-
 		for category, flagged in result["results"][0]["categories"].items():
 			if flagged:
 				score = result["results"][0]["category_scores"][category]
 				modfoo += f" | {category}: {round(score, 4)}"
-
 		return modfoo
 
 	async def send(self):
 		async with self._send_lock:
 			embed_list = self.embed_list.copy()
-
-			embed = discord.Embed(
-				color=discord.Colour(self.color),
-				description=self.assistant_msg.replace("`", r"\`")
-			)
+			text = self.assistant_msg or "（沒有文字回覆）"
+			# Discord 每個 embed description 最多 4096 字元；為保留 footer，尾段最多一個 embed。
+			# 另外保留整個回答於 chat.json；Discord 只是顯示摘要。
+			if len(text) > 3900:
+				text = text[:3880] + "\n…（內容過長，已截斷）"
+			embed = discord.Embed(color=discord.Colour(self.color), description=text)
 			embed.set_author(name="ChatGPT")
-
 			if self.finish:
-
 				if self.usage:
 					usage_text = (
 						f"tokens: {self.usage['total_tokens']}"
-						f"({self.usage['prompt_tokens']}/"
-						f"{self.usage['completion_tokens']})"
+						f"({self.usage['prompt_tokens']}/{self.usage['completion_tokens']})"
 					)
 				else:
 					usage_text = "tokens: unknown"
-
-				embed.set_footer(
-					text=(
-						f"{self.model} | "
-						f"{self.completion_id} | "
-						f"{usage_text} | "
-						f"{self.process_time}s"
-						f"{self.assistant_modfoo or ''}"
-					)
-				)
-
+				embed.set_footer(text=(
+					f"{self.model} | {self.completion_id} | {usage_text} | "
+					f"{self.process_time}s{self.assistant_modfoo or ''}"
+				)[:2048])
 			embed_list.append(embed)
-
 			if self.discord_msg is None:
-				if self.image_url:
-					self.discord_msg = await self.ctx.followup.send(
-						embeds=embed_list,
-						file=self.file,
-						wait=True
-					)
-				else:
-					self.discord_msg = await self.ctx.followup.send(
-						embeds=embed_list,
-						wait=True
-					)
+				kwargs = {"embeds": embed_list, "wait": True}
+				if self.file is not None:
+					kwargs["file"] = self.file
+				self.discord_msg = await self.ctx.followup.send(**kwargs)
 			else:
-				if self.image_url:
-					self.discord_msg = await self.discord_msg.edit(
-						embeds=embed_list,
-						attachments=self.file
-					)
-				else:
-					self.discord_msg = await self.discord_msg.edit(
-						embeds=embed_list
-					)
-
+				self.discord_msg = await self.discord_msg.edit(embeds=embed_list)
 			self._last_sent = self.assistant_msg
 
+
 class ChatGPT(commands.Cog):
-	chatgptcom = app_commands.Group(
-		name="chatgpt",
-		description="chat with chatgpt"
-	)
+	chatgptcom = app_commands.Group(name="chatgpt", description="chat with chatgpt")
+	MAX_TOOL_ROUNDS = 5
+	MAX_CALLS_PER_ROUND = 3
+	MAX_TOOL_OUTPUT_BYTES = 200_000
+	MAX_SAVED_FILE_BYTES = 1_000_000
+	FILE_TTL_SECONDS = 3 * 24 * 60 * 60
 
 	def __init__(self, bot):
 		self.bot: commands.Bot = bot
+		intro_dir = Path(config.dir) / "data" / "chatgpt" / "intro"
+		c1_intro = (intro_dir / "c1").read_text(encoding="UTF-8")
+		c2_intro = (intro_dir / "c2").read_text(encoding="UTF-8")
+		# 新的 c3 提示詞檔案必須存在。
+		c3_intro = (intro_dir / "c3").read_text(encoding="UTF-8")
 
-		with open(config.dir / "data" / "chatgpt" / "intro" / "c1", "r") as f:
-			c1_intro = f.read()
-
-		with open(config.dir / "data" / "chatgpt" / "intro" / "c2", "r") as f:
-			c2_intro = f.read()
-
-		self.route_openai = {
-			"token": config.chatgpt_moderations
-		}
-
+		self.route_openai = {"token": config.chatgpt_moderations}
 		self.route_girl = {
 			"base_url": "scfw7zf2j7me4nvbra5zdy7i.agents.do-ai.run",
 			"token": config.chatgpt_girl_token
@@ -267,438 +186,639 @@ class ChatGPT(commands.Cog):
 			"base_url": "oxlzogl6d4b5dlkgvl275azi.agents.do-ai.run",
 			"token": config.chatgpt_boy_token
 		}
-
 		self.chat_types = {
-			"b": {
-				"color": 0x7DD3FC,
-				"api": "completions",
-				"route": self.route_boy
-			},
-			"g": {
-				"color": 0xF9A8D4,
-				"api": "completions",
-				"route": self.route_girl
-			},
-			"c1": {
-				"color": 0x86EFAC,
+			"b": {"color": 0x7DD3FC, "api": "completions", "route": self.route_boy},
+			"g": {"color": 0xF9A8D4, "api": "completions", "route": self.route_girl},
+			"c1": {"color": 0x86EFAC, "api": "responses", "instructions": c1_intro},
+			"c2": {"color": 0xC4B5FD, "api": "responses", "instructions": c2_intro},
+			"c3": {
+				"color": 0xFBBF24,
 				"api": "responses",
-				"instructions": c1_intro
-			},
-			"c2": {
-				"color": 0xC4B5FD,
-				"api": "responses",
-				"instructions": c2_intro
+				"model": "gpt-6-sol",
+				"instructions": c3_intro,
+				"tools": True,
+				"service_tier": "flex"
 			}
 		}
-
 		self.model = "gpt-5.6-luna"
 		self.model_image = "gpt-image-2.5-flare"
 		self.chatgptchannel = config.chatgpt_channel
-
-		database_path = os.path.join(
-			config.dir, "database", "chatgpt.db"
-		)
+		self.github = GitHub(token=config.github_token)
+		self._chat_locks = {}
 		self.chatgptdb = sqlite3.connect(
-			database_path,
-			isolation_level=None
+			os.path.join(config.dir, "database", "chatgpt.db"), isolation_level=None
 		)
+		self.chatgptdb.execute("""
+			CREATE TABLE IF NOT EXISTS files (
+				id TEXT PRIMARY KEY,
+				filename TEXT NOT NULL,
+				created_at INTEGER NOT NULL,
+				expires_at INTEGER NOT NULL
+			)
+		""")
+		self.c3_tools = self._github_tool_definitions() + [self._save_file_tool_definition()]
 
-	def num_tokens_from_messages(self, messages:list, model:str):
-		"""Return the number of tokens used by a list of messages."""
+	def _github_tool_definitions(self):
+		descriptions = {
+			"github_repository": ("Get basic repository information", ["repo"]),
+			"github_read_file": ("Read UTF-8 source file in a GitHub repository", ["repo", "path", "ref"]),
+			"github_list_directory": ("List files in a repository directory", ["repo", "path", "ref"]),
+			"github_branches": ("List repository branches", ["repo", "page", "per_page"]),
+			"github_commits": ("List repository commits", ["repo", "ref", "path", "page", "per_page"]),
+			"github_commit": ("Get a commit and its changed files", ["repo", "sha"]),
+			"github_compare": ("Compare two branches or commits", ["repo", "base", "head"]),
+			"github_tree": ("Get file tree for a branch", ["repo", "ref", "recursive"]),
+			"github_search_paths": ("Search filenames and paths in a specific branch", ["repo", "ref", "keyword", "limit"]),
+			"github_search_code": ("Search code on repository default branch", ["repo", "query", "page", "per_page"])
+		}
+		optional = {"ref", "path", "page", "per_page", "recursive", "limit"}
+		numbers = {"page", "per_page", "limit"}
+		booleans = {"recursive"}
+		result = []
+		for name, (description, fields) in descriptions.items():
+			properties = {}
+			for field in fields:
+				kind = "integer" if field in numbers else "boolean" if field in booleans else "string"
+				properties[field] = {"type": [kind, "null"] if field in optional else kind}
+			result.append({
+				"type": "function", "name": name, "description": description,
+				"strict": True,
+				"parameters": {
+					"type": "object", "properties": properties,
+					"required": fields, "additionalProperties": False
+				}
+			})
+		return result
+
+	@staticmethod
+	def _save_file_tool_definition():
+		return {
+			"type": "function",
+			"name": "save_file",
+			"description": "Save a UTF-8 text file and return a signed download URL valid for 3 days. "
+										 "Use for generated Python, HTML, JSON, Markdown and other text files. "
+										 "Maximum file size is 1 MB.",
+			"strict": True,
+			"parameters": {
+				"type": "object",
+				"properties": {
+					"filename": {"type": "string", "description": "Download filename, e.g. app.py"},
+					"content": {"type": "string", "description": "Complete UTF-8 text content"}
+				},
+				"required": ["filename", "content"],
+				"additionalProperties": False
+			}
+		}
+
+	async def save_file(self, filename: str, content: str):
+		if not isinstance(filename, str) or not isinstance(content, str):
+			raise ValueError("filename and content must be strings")
+		if "\x00" in filename or "\r" in filename or "\n" in filename:
+			raise ValueError("Invalid filename")
+		# Both Unix and Windows separators must be treated as path separators.
+		safe_name = filename.replace("\\", "/").split("/")[-1]
+		if not safe_name or safe_name in (".", "..") or len(safe_name.encode("utf-8")) > 255:
+			raise ValueError("Invalid filename")
+
+		file_bytes = content.encode("utf-8")
+		if len(file_bytes) > self.MAX_SAVED_FILE_BYTES:
+			raise ValueError("File exceeds 1 MB limit")
+
+		file_id = uuid.uuid4().hex
+		created_at = int(time.time())
+		expires_at = created_at + self.FILE_TTL_SECONDS
+		file_dir = Path(config.dir) / "data" / "chatgpt" / "files"
+		file_dir.mkdir(parents=True, exist_ok=True)
+		file_path = file_dir / file_id
+		# Exclusive creation avoids accidental overwrites.
+		with file_path.open("xb") as f:
+			f.write(file_bytes)
+
+		try:
+			self.chatgptdb.execute(
+				"INSERT INTO files (id, filename, created_at, expires_at) VALUES (?, ?, ?, ?)",
+				(file_id, safe_name, created_at, expires_at)
+			)
+		except Exception:
+			file_path.unlink(missing_ok=True)
+			raise
+
+		state = uuid.uuid4().hex
+		signature = hmac.new(
+			config.secret.encode("UTF-8"),
+			f"{file_id}-{expires_at}-{state}".encode("UTF-8"),
+			hashlib.sha256
+		).hexdigest()
+		query = urlencode({"expires": expires_at, "state": state, "token": signature})
+		return {
+			"filename": safe_name,
+			"url": f"https://{config.domain}/api/chat-files/{file_id}?{query}",
+			"expires_at": expires_at
+		}
+
+	def cleanup_expired_files(self):
+		now = int(time.time())
+		rows = self.chatgptdb.execute(
+			"SELECT id FROM files WHERE expires_at <= ?", (now,)
+		).fetchall()
+		file_dir = Path(config.dir) / "data" / "chatgpt" / "files"
+		removed = 0
+		for (file_id,) in rows:
+			(file_dir / file_id).unlink(missing_ok=True)
+			self.chatgptdb.execute("DELETE FROM files WHERE id = ?", (file_id,))
+			removed += 1
+		return removed
+
+	async def execute_tool(self, name: str, arguments: dict):
+		if not isinstance(arguments, dict):
+			raise ValueError("Tool arguments must be an object")
+		# 將 nullable 參數轉成 GitHub 函式的預設值。
+		args = {key: value for key, value in arguments.items() if value is not None}
+		match name:
+			case "save_file":
+				return await self.save_file(**args)
+			case "github_repository":
+				return await self.github.repository(**args)
+			case "github_read_file":
+				return await self.github.read_file(**args)
+			case "github_list_directory":
+				return await self.github.list_directory(**args)
+			case "github_branches":
+				return await self.github.branches(**args)
+			case "github_commits":
+				return await self.github.commits(**args)
+			case "github_commit":
+				return await self.github.commit(**args)
+			case "github_compare":
+				return await self.github.compare(**args)
+			case "github_tree":
+				return await self.github.tree(**args)
+			case "github_search_paths":
+				return await self.github.search_paths(**args)
+			case "github_search_code":
+				return await self.github.search_code(**args)
+			case _:
+				raise ValueError(f"Unknown tool: {name}")
+
+	@staticmethod
+	def _tool_key(call):
+		try:
+			args = json.loads(call["arguments"])
+			encoded = json.dumps(args, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+		except (ValueError, TypeError, KeyError):
+			encoded = call.get("arguments", "")
+		return (call.get("name"), encoded)
+
+	@staticmethod
+	def cleanup_save_file_calls(items: list):
+		outputs = {
+			item.get("call_id"): item
+			for item in items
+			if item.get("type") == "function_call_output"
+		}
+
+		for item in items:
+			if item.get("type") != "function_call":
+				continue
+
+			if item.get("name") != "save_file":
+				continue
+
+			output = outputs.get(item.get("call_id"))
+			if not output:
+				continue
+
+			try:
+				result = json.loads(output["output"])
+				arguments = json.loads(item["arguments"])
+			except (ValueError, TypeError, KeyError):
+				continue
+
+			# 只有成功儲存的檔案才清理
+			if not isinstance(result, dict) or "url" not in result:
+				continue
+
+			if not isinstance(arguments, dict) or "content" not in arguments:
+				continue
+
+			arguments["content"] = "(deleted)"
+			item["arguments"] = json.dumps(arguments, ensure_ascii=False)
+
+	@classmethod
+	def cleanup_tool_outputs(cls, items: list, new_call_ids: set[str] | None = None) -> set[str]:
+		"""Keep the newest successful output for repeated tool + equivalent JSON arguments.
+
+		Prior call records remain unchanged. Only older function_call_output.output
+		values are replaced by '(deleted)'. Failed NEW calls do not erase prior data.
+		"""
+		outputs = {
+			item.get("call_id"): item
+			for item in items
+			if item.get("type") == "function_call_output"
+		}
+		calls = [item for item in items if item.get("type") == "function_call"]
+		if new_call_ids is None:
+			new_call_ids = {call.get("call_id") for call in calls}
+
+		newest_success = {}
+		for index, call in enumerate(calls):
+			call_id = call.get("call_id")
+			out = outputs.get(call_id)
+			if call_id in new_call_ids and out and out.get("output") != "(deleted)":
+				newest_success[cls._tool_key(call)] = index
+
+		deleted_ids = set()
+		for index, call in enumerate(calls):
+			call_id = call.get("call_id")
+			out = outputs.get(call_id)
+			last_index = newest_success.get(cls._tool_key(call))
+			if last_index is not None and index < last_index and out and out.get("output") != "(deleted)":
+				out["output"] = "(deleted)"
+				deleted_ids.add(call_id)
+		return deleted_ids
+
+	def _chat_path(self, chatid):
+		return Path(config.dir) / "data" / "chatgpt" / str(chatid)
+
+	@staticmethod
+	def _write_json(path: Path, data):
+		temp = path.with_name(path.name + "." + uuid.uuid4().hex + ".tmp")
+		try:
+			with temp.open("w", encoding="UTF-8") as f:
+				json.dump(data, f, ensure_ascii=False, indent=2)
+			os.replace(temp, path)
+		finally:
+			temp.unlink(missing_ok=True)
+
+	def sync_deleted_outputs(self, chatid, deleted_ids: set[str]):
+		if not deleted_ids:
+			return
+		path = self._chat_path(chatid) / "chat.json"
+		with path.open("r", encoding="UTF-8") as f:
+			log = json.load(f)
+		changed = False
+		for entry in log:
+			for item in entry.get("response_items", []):
+				if item.get("type") == "function_call_output" and item.get("call_id") in deleted_ids:
+					if item.get("output") != "(deleted)":
+						item["output"] = "(deleted)"
+						changed = True
+		if changed:
+			self._write_json(path, log)
+
+	def num_tokens_from_messages(self, messages: list, model: str):
 		try:
 			encoding = tiktoken.encoding_for_model(model)
 		except KeyError:
 			encoding = tiktoken.get_encoding("cl100k_base")
-		num_tokens = 0
+		count = 3
 		for message in messages:
-			num_tokens += 3
+			count += 3
 			for key, value in message.items():
 				if isinstance(value, str):
-					num_tokens += len(encoding.encode(value))
+					count += len(encoding.encode(value))
 				elif isinstance(value, list):
 					for content in value:
-						if content["type"] == "text":
-							num_tokens += len(encoding.encode(content["text"]))
-						elif content["type"] == "image_url":
-							num_tokens += self.num_tokens_from_image(content["image_url"]["url"].split("/")[-1].split("?")[0])
+						if content.get("type") == "text":
+							count += len(encoding.encode(content["text"]))
+						elif content.get("type") == "image_url":
+							image_id = content["image_url"]["url"].split("/")[-1].split("?")[0]
+							count += self.num_tokens_from_image(image_id)
 				if key == "name":
-					num_tokens += 1
-		num_tokens += 3
-		return num_tokens
+					count += 1
+		return count
 
-	async def chat(
-		self,
-		message: list,
-		max_tokens: int,
-		chatid: str | int,
-		base_url: str,
-		token: str,
-		res_cls: GPTres
-	) -> GPTres:
+	async def chat(self, message: list, max_tokens: int, chatid: str | int, base_url: str, token: str, res_cls: GPTres) -> GPTres:
 		chat_uuid = self.chatgptdb.execute(
-			"SELECT uuid FROM list WHERE id = ?",
-			(int(chatid),)
+			"SELECT uuid FROM list WHERE id = ?", (int(chatid),)
 		).fetchone()[0]
-
 		data = {
 			"messages": message,
 			"max_tokens": max_tokens,
 			"user": chat_uuid,
 			"stream": True,
-			"stream_options": {
-				"include_usage": True
-			}
+			"stream_options": {"include_usage": True}
 		}
-		headers = {
-			"Content-Type": "application/json",
-			"Authorization": f"Bearer {token}"
-		}
-
+		headers = {"Content-Type": "application/json", "Authorization": f"Bearer {token}"}
 		timeout = aiohttp.ClientTimeout(total=610)
 		url = f"https://{base_url}/api/v1/chat/completions"
-
+		start_time = time.perf_counter()
 		async with aiohttp.ClientSession(timeout=timeout) as session:
-			async with session.post(
-				url,
-				json=data,
-				headers=headers
-			) as response:
-				if response.content_type != "text/event-stream" and response.status != 200:
-					error = await response.json()
-					logging.warning("AI Chat Request failed! | Data: %s", error)
+			async with session.post(url, json=data, headers=headers) as response:
+				if response.status != 200:
+					error = await response.text()
+					logging.warning("AI Chat Request failed: %s", error[:1500])
 					response.raise_for_status()
-
 				if response.content_type == "text/event-stream":
-					start_time = time.perf_counter()
-
 					while True:
 						raw_line = await response.content.readline()
-						line = raw_line.decode().strip()
-
+						if not raw_line:
+							raise RuntimeError("Chat Completions stream ended unexpectedly")
+						line = raw_line.decode("utf-8").strip()
 						if not line.startswith("data: "):
 							continue
-
 						event_data = line[6:]
-
 						if event_data == "[DONE]":
-							process_time = round(time.perf_counter() - start_time, 2)
-
-							try:
-								await res_cls.done(process_time=process_time)
-							except Exception as e:
-								logging.error(
-									"AI Chat Error at Done! | %s: %s",
-									e.__class__.__name__,
-									e
-								)
-								await res_cls.ctx.followup.send(
-									content=f"AI Chat Error at Done! | {e.__class__.__name__}: {e}",
-									ephemeral=True
-								)
-
+							await res_cls.done(round(time.perf_counter() - start_time, 2))
 							return res_cls
-
 						event = json.loads(event_data)
-
 						if res_cls.completion_id is None:
-							res_cls.completion_id = event["id"]
-							res_cls.model = event["model"]
-
-						if "usage" in event:
+							res_cls.completion_id = event.get("id")
+							res_cls.model = event.get("model")
+						if event.get("usage"):
 							res_cls.usage = event["usage"]
-							continue
-
 						if not event.get("choices"):
 							continue
-
-						delta = event["choices"][0]["delta"]
-
+						delta = event["choices"][0].get("delta") or {}
 						if delta.get("reasoning_content"):
 							res_cls.assistant_reasoning += delta["reasoning_content"]
-
 						if delta.get("content"):
 							res_cls.assistant_msg += delta["content"]
-
-							if not res_cls.first_token.is_set():
-								res_cls.first_token.set()
-
+							res_cls.first_token.set()
 				else:
 					event = await response.json()
-
-					res_cls.completion_id = event["id"]
-					res_cls.model = event["model"]
-					res_cls.usage = event["usage"]
-
+					res_cls.completion_id = event.get("id")
+					res_cls.model = event.get("model")
+					res_cls.usage = event.get("usage")
 					assistant = event["choices"][0]["message"]
-					res_cls.assistant_msg = assistant["content"]
-					res_cls.assistant_reasoning = assistant["reasoning_content"]
-
-					process_time = round(
-						float(response.headers.get("x-process-time")),
-						2
-					)
-					await res_cls.done(process_time=process_time)
-
+					res_cls.assistant_msg = assistant.get("content") or ""
+					res_cls.assistant_reasoning = assistant.get("reasoning_content") or ""
+					await res_cls.done(round(time.perf_counter() - start_time, 2))
 					return res_cls
 
-	async def chat_responses(
-		self,
-		message: list,
-		max_tokens: int,
-		chatid: str | int,
-		instructions: str,
-		res_cls: GPTres
-	) -> GPTres:
+	async def chat_responses(self, message: list, max_tokens: int, chatid: str | int,
+													 instructions: str, res_cls: GPTres,
+													 model: str | None = None, tools: list | None = None,
+													 persist_history: bool = True, service_tier: str | None = None) -> GPTres:
 		chat_uuid = self.chatgptdb.execute(
-			"SELECT uuid FROM list WHERE id = ?",
-			(int(chatid),)
+			"SELECT uuid FROM list WHERE id = ?", (int(chatid),)
 		).fetchone()[0]
-
-		data = {
-			"model": self.model,
-			"instructions": instructions,
-			"input": message,
-			"max_output_tokens": max_tokens,
-			"stream": True,
-			"store": False,
-			"safety_identifier": chat_uuid
-		}
+		inputs = copy.deepcopy(message)
+		res_cls.response_items = []
+		tools = tools or []
 		headers = {
 			"Authorization": f"Bearer {config.chatgpt_user}",
 			"Content-Type": "application/json"
 		}
-
-		timeout = aiohttp.ClientTimeout(total=610)
+		timeout = aiohttp.ClientTimeout(total=None, sock_connect=30, sock_read=610)
 		start_time = time.perf_counter()
+		total_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
 		async with aiohttp.ClientSession(timeout=timeout) as session:
-			async with session.post(
-				"https://api.openai.com/v1/responses",
-				json=data,
-				headers=headers
-			) as response:
-				response.raise_for_status()
+			for round_index in range(self.MAX_TOOL_ROUNDS + 1):
+				data = {
+					"model": model or self.model,
+					"instructions": instructions,
+					"input": inputs,
+					"max_output_tokens": max_tokens,
+					"stream": True,
+					"store": False,
+					"service_tier": service_tier or "default",
+					"include": ["reasoning.encrypted_content"],
+					"safety_identifier": chat_uuid
+				}
+				if tools:
+					data["tools"] = tools
+					data["tool_choice"] = "auto" if round_index < self.MAX_TOOL_ROUNDS else "none"
 
-				async for raw_line in response.content:
-					line = raw_line.decode("utf-8").strip()
+				result = None
+				async with session.post("https://api.openai.com/v1/responses", json=data, headers=headers) as response:
+					if response.status != 200:
+						body = await response.text()
+						raise RuntimeError(f"Responses API HTTP {response.status}: {body[:1500]}")
+					while True:
+						raw_line = await response.content.readline()
+						if not raw_line:
+							break
+						line = raw_line.decode("utf-8").strip()
+						if not line.startswith("data:"):
+							continue
+						event_text = line[5:].strip()
+						if not event_text or event_text == "[DONE]":
+							continue
+						event = json.loads(event_text)
+						match event.get("type"):
+							case "response.created":
+								current = event["response"]
+								res_cls.completion_id = current.get("id")
+								res_cls.model = current.get("model")
+							case "response.output_text.delta":
+								res_cls.assistant_msg += event["delta"]
+								res_cls.first_token.set()
+							case "response.reasoning_summary_text.delta":
+								res_cls.assistant_reasoning += event["delta"]
+							case "response.completed":
+								result = event["response"]
+							case "response.failed":
+								raise RuntimeError(f"Responses API failed: {event['response'].get('error')}")
+							case "response.incomplete":
+								raise RuntimeError(
+									f"Responses API incomplete: {event['response'].get('incomplete_details')}"
+								)
 
-					if not line.startswith("data: "):
-						continue
+				if result is None:
+					raise RuntimeError("Responses API stream ended unexpectedly")
+				usage = result.get("usage") or {}
+				total_usage["prompt_tokens"] += usage.get("input_tokens", 0)
+				total_usage["completion_tokens"] += usage.get("output_tokens", 0)
+				total_usage["total_tokens"] += usage.get("total_tokens", 0)
+				res_cls.usage = total_usage.copy()
+				res_cls.completion_id = result.get("id")
+				res_cls.model = result.get("model")
 
-					event = json.loads(line[6:])
+				output_items = result.get("output") or []
+				# 深複製不是必需，但可明確保證 outputs 不會被意外共用。
+				inputs.extend(copy.deepcopy(output_items))
+				res_cls.response_items.extend(copy.deepcopy(output_items))
+				calls = [item for item in output_items if item.get("type") == "function_call"]
+				if not calls:
+					await res_cls.done(round(time.perf_counter() - start_time, 2))
+					return res_cls
 
-					match event.get("type"):
-						case "response.created":
-							result = event["response"]
-							res_cls.completion_id = result["id"]
-							res_cls.model = result["model"]
+				if round_index >= self.MAX_TOOL_ROUNDS:
+					raise RuntimeError("Maximum tool rounds exceeded")
+				if len(calls) > self.MAX_CALLS_PER_ROUND:
+					raise RuntimeError("Too many tool calls in one round")
 
-						case "response.output_text.delta":
-							res_cls.assistant_msg += event["delta"]
-							res_cls.first_token.set()
+				good_ids = set()
+				for call in calls:
+					call_id = call["call_id"]
+					name = call["name"]
+					good = False
+					try:
+						arguments = json.loads(call["arguments"])
+						if not isinstance(arguments, dict):
+							raise ValueError("Tool arguments must be an object")
+						tool_result = await asyncio.wait_for(
+							self.execute_tool(name, arguments), timeout=60
+						)
+						text = json.dumps(tool_result, ensure_ascii=False)
+						if len(text.encode("utf-8")) > self.MAX_TOOL_OUTPUT_BYTES:
+							text = json.dumps({"error": "Tool result is too large"})
+						else:
+							good = True
+					except Exception as e:
+						logging.warning("Tool %s failed: %s", name, e)
+						text = json.dumps({"error": f"{type(e).__name__}: {str(e)[:500]}"}, ensure_ascii=False)
+					output = {"type": "function_call_output", "call_id": call_id, "output": text}
+					inputs.append(copy.deepcopy(output))
+					res_cls.response_items.append(copy.deepcopy(output))
+					if good:
+						good_ids.add(call_id)
 
-						case "response.reasoning_summary_text.delta":
-							res_cls.assistant_reasoning += event["delta"]
+				if good_ids:
+					# 只清除同工具+同參數的舊結果，且新的呼叫必須成功。
+					deleted_ids = self.cleanup_tool_outputs(inputs, good_ids)
+					res_cls.deleted_call_ids.update(deleted_ids)
+					# inputs 是 deepcopy，所以同一回合的 response_items 也要獨立同步。
+					for item in res_cls.response_items:
+						if item.get("type") == "function_call_output" and item.get("call_id") in deleted_ids:
+							item["output"] = "(deleted)"
+					if persist_history:
+						self.sync_deleted_outputs(chatid, deleted_ids)
 
-						case "response.completed":
-							result = event["response"]
-							usage = result["usage"]
+				self.cleanup_save_file_calls(inputs)
 
-							res_cls.completion_id = result["id"]
-							res_cls.model = result["model"]
+		raise RuntimeError("Tool execution loop ended unexpectedly")
 
-							res_cls.usage = {
-								"prompt_tokens": usage["input_tokens"],
-								"completion_tokens": usage["output_tokens"],
-								"total_tokens": usage["total_tokens"]
-							}
-
-							process_time = round(
-								time.perf_counter() - start_time, 2
-							)
-							await res_cls.done(process_time)
-							return res_cls
-
-						case "response.failed":
-							error = event["response"].get("error") or {}
-							raise RuntimeError(
-								f"Responses API failed: {error}"
-							)
-
-						case "response.incomplete":
-							details = event["response"].get("incomplete_details")
-							raise RuntimeError(
-								f"Responses API incomplete: {details}"
-							)
-
-		raise RuntimeError("Responses API stream ended unexpectedly")
-
-	def ischat(self, chatid:str | int) -> bool:
-		cursor = self.chatgptdb.execute('SELECT * FROM list WHERE id = ?', (int(chatid),)).fetchone()
-		if cursor is None:
-			return False
-		elif not os.path.isdir(os.path.join(config.dir, 'data', 'chatgpt', str(chatid))):
-			return False
-		else:
-			return True
+	def ischat(self, chatid: str | int) -> bool:
+		cursor = self.chatgptdb.execute("SELECT * FROM list WHERE id = ?", (int(chatid),)).fetchone()
+		return cursor is not None and self._chat_path(chatid).is_dir()
 
 	def get_chat_config(self, chatid: str | int) -> dict:
 		chat_type = self.chatgptdb.execute(
-			"SELECT sex FROM list WHERE id = ?",
-			(int(chatid),)
+			"SELECT sex FROM list WHERE id = ?", (int(chatid),)
 		).fetchone()[0]
-
 		return self.chat_types.get(chat_type, self.chat_types["g"])
 
-	def token_set(self, tokens_usage:dict, token_punish:int) -> int:
-		tokens = self.chatgptdb.execute('SELECT value FROM memo WHERE key = ?', ("token_limit",)).fetchone()[0]
-		total_tokens = tokens_usage["prompt_tokens"] + (tokens_usage["completion_tokens"] * 3)
-		remain = tokens - (total_tokens * token_punish) if tokens - (total_tokens * token_punish) > 0 else 0
-		self.chatgptdb.execute('UPDATE memo SET value = ? WHERE key = ?', (remain, "token_limit"))
+	def token_set(self, tokens_usage: dict, token_punish: int) -> int:
+		tokens = self.chatgptdb.execute("SELECT value FROM memo WHERE key = ?", ("token_limit",)).fetchone()[0]
+		total_tokens = tokens_usage["prompt_tokens"] + tokens_usage["completion_tokens"] * 3
+		remain = max(tokens - total_tokens * token_punish, 0)
+		self.chatgptdb.execute("UPDATE memo SET value = ? WHERE key = ?", (remain, "token_limit"))
 		self.chatgptdb.commit()
 		return remain
 
-	def get_chat_data(
-		self,
-		chatid: str | int,
-		message_id: int | None = None,
-		api: str = "completions"
-	) -> tuple[list, int]:
+	def _user_input(self, text: str, image_id: str | None, api: str):
+		user_message = {"role": "user", "content": text}
+		if image_id:
+			state = uuid.uuid4().hex
+			timestamp = int(datetime.now().timestamp())
+			signature = hmac.new(
+				config.secret.encode("UTF-8"),
+				f"{timestamp}-{state}".encode("UTF-8"), hashlib.sha256
+			).hexdigest()
+			image_url = (
+				f"https://{config.domain}/api/chatgpt/images/{image_id}"
+				f"?time={timestamp}&state={state}&token={signature}"
+			)
+			if api == "responses":
+				user_message["content"] = [
+					{"type": "input_text", "text": text},
+					{"type": "input_image", "image_url": image_url}
+				]
+			else:
+				user_message["content"] = [
+					{"type": "text", "text": text},
+					{"type": "image_url", "image_url": {"url": image_url, "detail": "high"}}
+				]
+		return user_message
+
+	def get_chat_data(self, chatid: str | int, message_id: int | None = None,
+										api: str = "completions", exclude_last_assistant: bool = False) -> tuple[list, int]:
 		msgid = self.chatgptdb.execute(
-			"SELECT msgid FROM list WHERE id = ?",
-			(int(chatid),)
+			"SELECT msgid FROM list WHERE id = ?", (int(chatid),)
 		).fetchone()[0]
-
-		chat_path = os.path.join(
-			config.dir, "data", "chatgpt", str(chatid), "chat.json"
-		)
-
-		with open(chat_path, "r", encoding="UTF-8") as f:
+		with (self._chat_path(chatid) / "chat.json").open("r", encoding="UTF-8") as f:
 			chat_log = json.load(f)
-
 		chat_data = []
-
-		for message in chat_log:
-			if message["id"] == 0:
+		last_id = chat_log[-1]["id"]
+		for entry in chat_log:
+			if entry["id"] == 0:
 				system_content = (
 					"Region: Japan\n"
 					f"Time Now: {datetime.now(tz=pytz.timezone('Asia/Tokyo')).isoformat(timespec='seconds')}\n"
 					"Note: The time will be updated each time it is sent.\n\n"
-					f"{message['system']}"
+					f"{entry['system']}"
 				)
-
 				chat_data.append({
 					"role": "system" if api == "responses" else "user",
 					"content": system_content
 				})
 				continue
-
-			user_message = {
-				"role": "user",
-				"content": message["user"]
-			}
-
-			if message.get("image_url"):
-				state = uuid.uuid4().hex
-				timestamp = int(datetime.now().timestamp())
-
-				signature = hmac.new(
-					config.secret.encode("UTF-8"),
-					f"{timestamp}-{state}".encode("UTF-8"),
-					hashlib.sha256
-				).hexdigest()
-
-				image_url = (
-					f"https://{config.domain}/api/chatgpt/images/{message['image_url']}"
-					f"?time={timestamp}&state={state}&token={signature}"
-				)
-
-				if api == "responses":
-					user_message["content"] = [
-						{
-							"type": "input_text",
-							"text": message["user"]
-						},
-						{
-							"type": "input_image",
-							"image_url": image_url
-						}
-					]
-				else:
-					user_message["content"] = [
-						{
-							"type": "text",
-							"text": message["user"]
-						},
-						{
-							"type": "image_url",
-							"image_url": {
-								"url": image_url,
-								"detail": "high"
-							}
-						}
-					]
-
-			chat_data.append(user_message)
-			chat_data.append({
-				"role": "assistant",
-				"content": message["assistant"]
-			})
-
-			if message_id is not None and message_id == message["id"]:
+			chat_data.append(self._user_input(entry["user"], entry.get("image_url"), api))
+			is_target = entry["id"] == (message_id if message_id is not None else last_id)
+			if exclude_last_assistant and is_target:
 				return chat_data, msgid
-
+			if api == "responses" and "response_items" in entry:
+				response_items = copy.deepcopy(entry["response_items"])
+				self.cleanup_save_file_calls(response_items)
+				chat_data.extend(copy.deepcopy(entry["response_items"]))
+			else:
+				chat_data.append({"role": "assistant", "content": entry["assistant"]})
+			if message_id is not None and is_target:
+				return chat_data, msgid
 		return chat_data, msgid
 
 	@chatgptcom.command(name="model")
-	async def GPT_model(self, ctx:discord.Interaction, model:int):
+	async def GPT_model(self, ctx: discord.Interaction, model: int):
 		await ctx.response.defer(ephemeral=True)
 		pass
 
 	@chatgptcom.command(name="tokens")
-	async def tokens(self, ctx:discord.Interaction):
+	async def tokens(self, ctx: discord.Interaction):
 		await ctx.response.defer(ephemeral=True)
 		pass
 
+	async def _respond(self, chatid, chat_config, chat_data, max_tokens, res_cls):
+		if chat_config["api"] == "responses":
+			return await self.chat_responses(
+				message=chat_data, max_tokens=max_tokens, chatid=chatid,
+				instructions=chat_config["instructions"], res_cls=res_cls,
+				model=chat_config.get("model"),
+				tools=self.c3_tools if chat_config.get("tools") else None,
+				persist_history=False,
+				service_tier=chat_config.get("service_tier")
+			)
+		return await self.chat(
+			message=chat_data, max_tokens=max_tokens, chatid=chatid,
+			res_cls=res_cls, **chat_config["route"]
+		)
+
+	@staticmethod
+	def _apply_deleted_ids(chat_log, deleted_ids):
+		for entry in chat_log:
+			for item in entry.get("response_items", []):
+				if item.get("type") == "function_call_output" and item.get("call_id") in deleted_ids:
+					item["output"] = "(deleted)"
 
 	@chatgptcom.command(name="generate")
-	async def generate(
-		self,
-		ctx: discord.Interaction,
-		text: str,
-		chatid: int = None,
-		max_tokens: int = 8192,
-		image_url: str = None
-	):
+	async def generate(self, ctx: discord.Interaction, text: str, chatid: int = None,
+										 max_tokens: int = 8192, image_url: str = None):
 		await ctx.response.defer(ephemeral=True)
-
 		if ctx.channel.id != self.chatgptchannel:
-			await ctx.followup.send(
-				"You can't use this command at this channel!",
-				ephemeral=True
-			)
+			await ctx.followup.send("You can't use this command at this channel!", ephemeral=True)
 			return
-
 		if max_tokens % 4 != 0 or max_tokens <= 0:
-			await ctx.followup.send(
-				"Invalid max tokens number",
-				ephemeral=True
-			)
+			await ctx.followup.send("Invalid max tokens number", ephemeral=True)
 			return
-
 		if chatid is None:
 			chatid = self.chatgptdb.execute(
-				"SELECT value FROM memo WHERE key = ?",
-				("last",)
+				"SELECT value FROM memo WHERE key = ?", ("last",)
 			).fetchone()[0]
-
 		if not self.ischat(chatid):
 			await ctx.followup.send("Chat not found!", ephemeral=True)
 			return
+		lock = self._chat_locks.setdefault(int(chatid), asyncio.Lock())
+		async with lock:
+			await self._generate_locked(ctx, text, chatid, max_tokens, image_url)
 
+	async def _generate_locked(self, ctx, text, chatid, max_tokens, image_url):
 		chat_config = self.get_chat_config(chatid)
-
-		# 處理圖片
+		# 舊 do-ai.run 介面不支援圖片。
+		if image_url and chat_config["api"] != "responses":
+			await ctx.followup.send("此聊天類型不支援圖片", ephemeral=True)
+			return
 		if image_url:
 			try:
 				image_id = await self.image_pend(image_url)
@@ -707,501 +827,247 @@ class ChatGPT(commands.Cog):
 				return
 		else:
 			image_id = None
-
 		await ctx.followup.send("Please wait...")
-
-		# 取得對話紀錄
-		chat_data, msgid = self.get_chat_data(
-			chatid,
-			api=chat_config["api"]
-		)
-
-		user_message = {
-			"role": "user",
-			"content": text
-		}
-
-		if image_id:
-			state = uuid.uuid4().hex
-			timestamp = int(datetime.now().timestamp())
-
-			signature = hmac.new(
-				config.secret.encode("UTF-8"),
-				f"{timestamp}-{state}".encode("UTF-8"),
-				hashlib.sha256
-			).hexdigest()
-
-			signed_url = (
-				f"https://{config.domain}/api/chatgpt/images/{image_id}"
-				f"?time={timestamp}&state={state}&token={signature}"
-			)
-
-			if chat_config["api"] == "responses":
-				user_message["content"] = [
-					{
-						"type": "input_text",
-						"text": text
-					},
-					{
-						"type": "input_image",
-						"image_url": signed_url
-					}
-				]
-			else:
-				user_message["content"] = [
-					{
-						"type": "text",
-						"text": text
-					},
-					{
-						"type": "image_url",
-						"image_url": {
-							"url": signed_url,
-							"detail": "high"
-						}
-					}
-				]
-
-		chat_data.append(user_message)
-
-		# 建立回覆物件
+		chat_data, msgid = self.get_chat_data(chatid, api=chat_config["api"])
+		chat_data.append(self._user_input(text, image_id, chat_config["api"]))
 		msgid += 1
-
 		res_cls = GPTres(
-			chatid=chatid,
-			msgid=msgid,
-			ctx=ctx,
-			user_msg=text,
-			image_id=image_id,
-			image_url=image_url,
-			color=chat_config["color"]
+			chatid=chatid, msgid=msgid, ctx=ctx, user_msg=text,
+			image_id=image_id, image_url=image_url, color=chat_config["color"]
 		)
-
-		# 呼叫 AI
 		try:
-			if chat_config["api"] == "responses":
-				new_res_cls = await self.chat_responses(
-					message=chat_data,
-					max_tokens=max_tokens,
-					chatid=chatid,
-					instructions=chat_config["instructions"],
-					res_cls=res_cls
-				)
-			else:
-				new_res_cls = await self.chat(
-					message=chat_data,
-					max_tokens=max_tokens,
-					chatid=chatid,
-					res_cls=res_cls,
-					**chat_config["route"]
-				)
-
+			result = await self._respond(chatid, chat_config, chat_data, max_tokens, res_cls)
 		except Exception as e:
-			res_cls.finish = True
-			res_cls.first_token.set()
-
-			logging.exception(
-				"AI Chat Request failed | ChatID: %s",
-				chatid
-			)
-
-			await ctx.followup.send(
-				f"Request failed! {type(e).__name__}: {e}",
-				ephemeral=True
-			)
+			await res_cls.fail()
+			logging.exception("AI Chat Request failed | ChatID: %s", chatid)
+			await ctx.followup.send(f"Request failed! {type(e).__name__}: {e}", ephemeral=True)
 			return
 
-		# 更新資料庫
 		timestamp = int(datetime.now().timestamp())
-
-		self.chatgptdb.execute(
-			"UPDATE memo SET value = ? WHERE key = ?",
-			(chatid, "last")
-		)
-		self.chatgptdb.execute(
-			"UPDATE list SET msgid = ? WHERE id = ?",
-			(msgid, int(chatid))
-		)
-		self.chatgptdb.execute(
-			"UPDATE list SET last_time = ? WHERE id = ?",
-			(timestamp, int(chatid))
-		)
-		self.chatgptdb.execute(
-			"UPDATE list SET last_msg = ? WHERE id = ?",
-			(text, int(chatid))
-		)
-		self.chatgptdb.commit()
-
-		# 儲存 chat.json
-		chat_path = os.path.join(
-			config.dir, "data", "chatgpt", str(chatid)
-		)
-
-		with open(
-			os.path.join(chat_path, "chat.json"),
-			"r+",
-			encoding="UTF-8"
-		) as f:
+		chat_path = self._chat_path(chatid)
+		with (chat_path / "chat.json").open("r", encoding="UTF-8") as f:
 			chat_log = json.load(f)
+		self._apply_deleted_ids(chat_log, getattr(result, "deleted_call_ids", set()))
+		item = {
+			"id": msgid, "user": text,
+			"assistant": result.assistant_msg,
+			"reasoning": result.assistant_reasoning,
+			"model": result.model
+		}
+		if image_id:
+			item["image_url"] = image_id
+		if chat_config["api"] == "responses":
+			item["response_items"] = result.response_items
+		chat_log.append(item)
+		self._write_json(chat_path / "chat.json", chat_log)
 
-			message = {
-				"id": msgid,
-				"user": text,
-				"assistant": new_res_cls.assistant_msg,
-				"reasoning": new_res_cls.assistant_reasoning,
-				"model": new_res_cls.model
-			}
-
-			if image_id:
-				message["image_url"] = image_id
-
-			chat_log.append(message)
-
-			f.seek(0)
-			json.dump(chat_log, f, ensure_ascii=False, indent=2)
-			f.truncate()
-
-		# 儲存 all.json
-		with open(
-			os.path.join(chat_path, "all.json"),
-			"r+",
-			encoding="UTF-8"
-		) as f:
+		with (chat_path / "all.json").open("r", encoding="UTF-8") as f:
 			all_log = json.load(f)
+		all_log.append({"role": "user", "content": text})
+		all_log.append({
+			"role": "assistant", "content": result.assistant_msg,
+			"reasoning_content": result.assistant_reasoning
+		})
+		self._write_json(chat_path / "all.json", all_log)
 
-			all_log.append({
-				"role": "user",
-				"content": text
-			})
-			all_log.append({
-				"role": "assistant",
-				"content": new_res_cls.assistant_msg,
-				"reasoning_content": new_res_cls.assistant_reasoning
-			})
-
-			f.seek(0)
-			json.dump(all_log, f, ensure_ascii=False, indent=2)
-			f.truncate()
-
+		self.chatgptdb.execute("UPDATE memo SET value = ? WHERE key = ?", (chatid, "last"))
+		self.chatgptdb.execute("UPDATE list SET msgid = ? WHERE id = ?", (msgid, int(chatid)))
+		self.chatgptdb.execute("UPDATE list SET last_time = ? WHERE id = ?", (timestamp, int(chatid)))
+		self.chatgptdb.execute("UPDATE list SET last_msg = ? WHERE id = ?", (text, int(chatid)))
+		self.chatgptdb.commit()
 
 	@chatgptcom.command(name="regenerate")
-	async def regenerate(
-		self,
-		ctx: discord.Interaction,
-		chatid: int = None,
-		max_tokens: int = 8192,
-		message_id: int = None
-	):
+	async def regenerate(self, ctx: discord.Interaction, chatid: int = None,
+											 max_tokens: int = 8192, message_id: int = None):
 		await ctx.response.defer(ephemeral=True)
-
 		if ctx.channel.id != self.chatgptchannel:
-			await ctx.followup.send(
-				"You can't use this command at this channel!",
-				ephemeral=True
-			)
+			await ctx.followup.send("You can't use this command at this channel!", ephemeral=True)
 			return
-
 		if max_tokens % 4 != 0 or max_tokens <= 0:
-			await ctx.followup.send(
-				"Invalid max tokens number",
-				ephemeral=True
-			)
+			await ctx.followup.send("Invalid max tokens number", ephemeral=True)
 			return
-
 		if chatid is None:
 			chatid = self.chatgptdb.execute(
-				"SELECT value FROM memo WHERE key = ?",
-				("last",)
+				"SELECT value FROM memo WHERE key = ?", ("last",)
 			).fetchone()[0]
-
 		if not self.ischat(chatid):
-			await ctx.followup.send(
-				"Chat not found!",
-				ephemeral=True
-			)
+			await ctx.followup.send("Chat not found!", ephemeral=True)
 			return
+		lock = self._chat_locks.setdefault(int(chatid), asyncio.Lock())
+		async with lock:
+			await self._regenerate_locked(ctx, chatid, max_tokens, message_id)
 
+	async def _regenerate_locked(self, ctx, chatid, max_tokens, message_id):
 		chat_config = self.get_chat_config(chatid)
+		chat_path = self._chat_path(chatid)
+		with (chat_path / "chat.json").open("r", encoding="UTF-8") as f:
+			chat_log = json.load(f)
+		entries = [entry for entry in chat_log if entry["id"] != 0]
+		if not entries:
+			await ctx.followup.send("No messages to regenerate", ephemeral=True)
+			return
+		target_id = message_id if message_id is not None else entries[-1]["id"]
+		target = next((entry for entry in entries if entry["id"] == target_id), None)
+		if target is None:
+			await ctx.followup.send("Message not found", ephemeral=True)
+			return
 
-		await ctx.followup.send("Please wait...")
-
-		chat_data, msgid = self.get_chat_data(
-			chatid,
-			message_id=message_id,
-			api=chat_config["api"]
+		chat_data, _ = self.get_chat_data(
+			chatid, message_id=target_id, api=chat_config["api"],
+			exclude_last_assistant=True
 		)
-
-		# 移除最後的 assistant 回覆
 		if len(chat_data) <= 1:
-			await ctx.followup.send(
-				"Cut chat log failed",
-				ephemeral=True
-			)
+			await ctx.followup.send("Cut chat log failed", ephemeral=True)
 			return
-
-		if chat_data[-1]["role"] == "assistant":
-			chat_data.pop()
-
-		last_msg = None
-
-		for message in reversed(chat_data):
-			if message["role"] == "user":
-				last_msg = message["content"]
-				break
-
-		if last_msg is None:
-			await ctx.followup.send(
-				"User message not found",
-				ephemeral=True
-			)
-			return
-
-
-		res_cls = GPTres(
-			chatid=chatid,
-			msgid=msgid,
-			ctx=ctx,
-			color=chat_config["color"]
-		)
-
-
+		await ctx.followup.send("Please wait...")
+		res_cls = GPTres(chatid=chatid, msgid=target_id, ctx=ctx, color=chat_config["color"])
 		try:
-			if chat_config["api"] == "responses":
-				new_res_cls = await self.chat_responses(
-					message=chat_data,
-					max_tokens=max_tokens,
-					chatid=chatid,
-					instructions=chat_config["instructions"],
-					res_cls=res_cls
-				)
-			else:
-				new_res_cls = await self.chat(
-					message=chat_data,
-					max_tokens=max_tokens,
-					chatid=chatid,
-					res_cls=res_cls,
-					**chat_config["route"]
-				)
-
+			result = await self._respond(chatid, chat_config, chat_data, max_tokens, res_cls)
 		except Exception as e:
-			res_cls.finish = True
-			res_cls.first_token.set()
-
-			logging.exception(
-				"AI Regenerate failed | ChatID: %s",
-				chatid
-			)
-
-			await ctx.followup.send(
-				f"Request failed! {type(e).__name__}: {e}",
-				ephemeral=True
-			)
+			await res_cls.fail()
+			logging.exception("AI Regenerate failed | ChatID: %s", chatid)
+			await ctx.followup.send(f"Request failed! {type(e).__name__}: {e}", ephemeral=True)
 			return
 
+		# 只改動選定的訊息；如是舊訊息，其後對話保持原樣。
+		with (chat_path / "chat.json").open("r", encoding="UTF-8") as f:
+			chat_log = json.load(f)
+		self._apply_deleted_ids(chat_log, getattr(result, "deleted_call_ids", set()))
+		target = next((entry for entry in chat_log if entry["id"] == target_id), None)
+		if target is None:
+			await ctx.followup.send("Message not found", ephemeral=True)
+			return
+		target["assistant"] = result.assistant_msg
+		target["reasoning"] = result.assistant_reasoning
+		target["model"] = result.model
+		if chat_config["api"] == "responses":
+			target["response_items"] = result.response_items
+		else:
+			target.pop("response_items", None)
+		self._write_json(chat_path / "chat.json", chat_log)
 
-		# 更新資料庫
-		self.chatgptdb.execute(
-			"UPDATE memo SET value = ? WHERE key = ?",
-			(chatid, "last")
-		)
-
+		with (chat_path / "all.json").open("r", encoding="UTF-8") as f:
+			all_log = json.load(f)
+		# all.json 目前是供匯出的時間紀錄，維持原本追加方式。
+		all_log.append({
+			"role": "assistant", "content": result.assistant_msg,
+			"reasoning_content": result.assistant_reasoning
+		})
+		self._write_json(chat_path / "all.json", all_log)
+		self.chatgptdb.execute("UPDATE memo SET value = ? WHERE key = ?", (chatid, "last"))
 		self.chatgptdb.execute(
 			"UPDATE list SET last_time = ? WHERE id = ?",
-			(
-				int(datetime.now().timestamp()),
-				int(chatid)
-			)
+			(int(datetime.now().timestamp()), int(chatid))
 		)
-
 		if message_id is None:
 			self.chatgptdb.execute(
-				"UPDATE list SET last_msg = ? WHERE id = ?",
-				(last_msg, int(chatid))
+				"UPDATE list SET last_msg = ? WHERE id = ?", (target["user"], int(chatid))
 			)
-
 		self.chatgptdb.commit()
-
-
-		chat_path = os.path.join(
-			config.dir,
-			"data",
-			"chatgpt",
-			str(chatid)
-		)
-
-
-		# 更新 chat.json
-		with open(
-			os.path.join(chat_path, "chat.json"),
-			"r+",
-			encoding="UTF-8"
-		) as f:
-			chat_log = json.load(f)
-
-			target = None
-
-			if message_id is not None:
-				for message in chat_log:
-					if message["id"] == message_id:
-						target = message
-						break
-			else:
-				target = chat_log[-1]
-
-
-			if target is None:
-				await ctx.followup.send(
-					"Message not found",
-					ephemeral=True
-				)
-				return
-
-
-			target["assistant"] = new_res_cls.assistant_msg
-			target["reasoning"] = new_res_cls.assistant_reasoning
-			target["model"] = new_res_cls.model
-
-
-			f.seek(0)
-			json.dump(
-				chat_log,
-				f,
-				ensure_ascii=False,
-				indent=2
-			)
-			f.truncate()
-
-
-		# 更新 all.json
-		with open(
-			os.path.join(chat_path, "all.json"),
-			"r+",
-			encoding="UTF-8"
-		) as f:
-			all_log = json.load(f)
-
-			all_log.append({
-				"role": "assistant",
-				"content": new_res_cls.assistant_msg,
-				"reasoning_content": new_res_cls.assistant_reasoning
-			})
-
-			f.seek(0)
-			json.dump(
-				all_log,
-				f,
-				ensure_ascii=False,
-				indent=2
-			)
-			f.truncate()
 
 	@chatgptcom.command(name="create")
-	async def create(self, ctx:discord.Interaction, name:str, sex:str, system:str = ""):
+	async def create(self, ctx: discord.Interaction, name: str, sex: str, system: str = ""):
 		await ctx.response.defer(ephemeral=True)
-		chat_uuid = str(uuid.uuid4()).replace("-", "")
-		count = self.chatgptdb.execute('SELECT value FROM memo WHERE key = ?', ("count",)).fetchone()[0]
-		count += 1
-		self.chatgptdb.execute('UPDATE memo SET value = ? WHERE key = ?', (count, "count"))
-		self.chatgptdb.execute('UPDATE memo SET value = ? WHERE key = ?', (count, "last"))
-		self.chatgptdb.execute('INSERT INTO list VALUES (?, ?, ?, ?, ?, ?, ?)', (count, name, chat_uuid, 0, int(datetime.now().timestamp()), None, sex))
+		if sex not in self.chat_types:
+			await ctx.followup.send("Invalid chat type", ephemeral=True)
+			return
+		chat_uuid = uuid.uuid4().hex
+		count = self.chatgptdb.execute(
+			"SELECT value FROM memo WHERE key = ?", ("count",)
+		).fetchone()[0] + 1
+		self.chatgptdb.execute("UPDATE memo SET value = ? WHERE key = ?", (count, "count"))
+		self.chatgptdb.execute("UPDATE memo SET value = ? WHERE key = ?", (count, "last"))
+		self.chatgptdb.execute(
+			"INSERT INTO list VALUES (?, ?, ?, ?, ?, ?, ?)",
+			(count, name, chat_uuid, 0, int(datetime.now().timestamp()), None, sex)
+		)
 		self.chatgptdb.commit()
-		os.mkdir(os.path.join(config.dir, 'data', 'chatgpt', str(count)))
-		with open(os.path.join(config.dir, 'data', 'chatgpt', str(count), "all.json"), 'w') as f:
-			json.dump([], f, ensure_ascii=False, indent=2)
-		with open(os.path.join(config.dir, 'data', 'chatgpt', str(count), "chat.json"), 'w') as f:
-			json.dump([{"id": 0, "system": system}], f, ensure_ascii=False, indent=2)
+		chat_path = self._chat_path(count)
+		chat_path.mkdir()
+		self._write_json(chat_path / "all.json", [])
+		self._write_json(chat_path / "chat.json", [{"id": 0, "system": system}])
 		await ctx.followup.send(f"successfully | ChatID: {count}")
 
 	@chatgptcom.command(name="export")
-	async def export(self, ctx:discord.Interaction, chatid:int, type:int):
+	async def export(self, ctx: discord.Interaction, chatid: int, type: int):
 		await ctx.response.defer(ephemeral=True)
-		# json = 0, txt = 1
 		if not self.ischat(chatid):
 			await ctx.followup.send("Chat not found!")
 			return
-		chat_name, chat_uuid = self.chatgptdb.execute('SELECT name, uuid FROM list WHERE id = ?', (chatid,)).fetchone()
+		chat_name, chat_uuid = self.chatgptdb.execute(
+			"SELECT name, uuid FROM list WHERE id = ?", (chatid,)
+		).fetchone()
 		if type == 0:
-			file = discord.File(fp=os.path.join(config.dir, 'data', 'chatgpt', str(chatid), 'all.json'), filename=f"{chat_name}.json")
+			file = discord.File(
+				fp=self._chat_path(chatid) / "all.json", filename=f"{chat_name}.json"
+			)
 			await ctx.followup.send(file=file)
 		elif type == 1:
-			with open(os.path.join(config.dir, 'data', 'chatgpt', str(chatid), 'all.json'), 'r') as f:
+			with (self._chat_path(chatid) / "all.json").open("r", encoding="UTF-8") as f:
 				data = json.load(f)
 			a = 0
 			chat = io.BytesIO()
-			chat.write(bytes(f"{chat_name} ({chat_uuid})\n\n", "UTF-8"))
+			chat.write(f"{chat_name} ({chat_uuid})\n\n".encode("UTF-8"))
 			for msg in data:
 				if msg["role"] == "user":
 					a += 1
-					chat.write(bytes(f"{a} ------------------\n\n", "UTF-8"))
-					chat.write(bytes("[user]\n", "UTF-8"))
-					chat.write(bytes(f"{msg['content']}\n\n", "UTF-8"))
+					chat.write(f"{a} ------------------\n\n[user]\n{msg['content']}\n\n".encode("UTF-8"))
 				elif msg["role"] == "assistant":
-					chat.write(bytes("[assistant]\n", "UTF-8"))
-					chat.write(bytes(f"{msg['content']}\n\n", "UTF-8"))
+					chat.write(f"[assistant]\n{msg['content']}\n\n".encode("UTF-8"))
 			chat.seek(0)
-			file = discord.File(fp=chat, filename=f"{chat_uuid}.txt")
-			await ctx.followup.send(file=file)
+			await ctx.followup.send(file=discord.File(fp=chat, filename=f"{chat_uuid}.txt"))
 
 	@chatgptcom.command(name="rename")
-	async def rename(self, ctx:discord.Interaction, chatid:int, name:str):
+	async def rename(self, ctx: discord.Interaction, chatid: int, name: str):
 		await ctx.response.defer(ephemeral=True)
 		pass
 
 	@chatgptcom.command(name="delete")
-	async def delete(self, ctx:discord.Interaction, chatid:int):
+	async def delete(self, ctx: discord.Interaction, chatid: int):
 		await ctx.response.defer(ephemeral=True)
 		pass
 
 	async def image_pend(self, image_url: str):
 		try:
 			if image_url.startswith("http"):
-				async with aiohttp.ClientSession() as session:
+				async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60)) as session:
 					async with session.get(image_url) as response:
 						response.raise_for_status()
 						image_data = await response.read()
 			else:
-				image_data = base64.b64decode(image_url.split(",")[1])
-
+				image_data = base64.b64decode(image_url.split(",", 1)[1])
 			image = Image.open(BytesIO(image_data))
 			image_id = uuid.uuid4().hex
-
-			image_path = os.path.join(
-				config.dir, "data", "chatgpt", "images", f"{image_id}.png"
-			)
+			image_path = self._chat_path("images") / f"{image_id}.png"
 			image.save(image_path, format="PNG")
-
 			return image_id
-
 		except Exception as e:
-			raise ValueError("無法讀取圖片: ", e)
+			raise ValueError(f"無法讀取圖片: {e}") from e
 
-	def num_tokens_from_image(self, image_id:str):
-		with open(os.path.join(config.dir, 'data', 'chatgpt', 'images', f'{image_id}.png'), 'rb') as f:
-			image_data = f.read()
-		image = Image.open(BytesIO(image_data))
-		image_size = image.size
-		max_dimension = max(image_size)
-		min_dimension = min(image_size)
-
+	def num_tokens_from_image(self, image_id: str):
+		with (self._chat_path("images") / f"{image_id}.png").open("rb") as f:
+			image = Image.open(BytesIO(f.read()))
+		max_dimension = max(image.size)
+		min_dimension = min(image.size)
 		if max_dimension > 2048:
 			ratio = 2048 / max_dimension
 			max_dimension = 2048
 			min_dimension *= ratio
-
 		if min_dimension > 768:
 			ratio = 768 / min_dimension
 			min_dimension = 768
 			max_dimension *= ratio
-
 		width_blocks = math.ceil(max_dimension / 512)
 		height_blocks = math.ceil(min_dimension / 512)
-		return ((width_blocks * height_blocks) * 170) + 85
+		return width_blocks * height_blocks * 170 + 85
 
 	@chatgptcom.command(name="image")
-	async def image_generate(self, ctx:discord.Interaction, prompt:str, size:str = "1024x1024", quality:str = "standard"):
+	async def image_generate(self, ctx: discord.Interaction, prompt: str,
+													 size: str = "1024x1024", quality: str = "standard"):
 		await ctx.response.defer(ephemeral=True)
 		if ctx.channel.id != config.chatgpt_image_channel:
 			await ctx.followup.send("You can't use this command at this channel!", ephemeral=True)
+			return
 		await ctx.followup.send("Please wait...")
 		headers = {
 			"Content-Type": "application/json",
@@ -1209,54 +1075,54 @@ class ChatGPT(commands.Cog):
 		}
 		data = {
 			"model": self.model_image,
-			"prompt": f"I NEED to test how the tool works with extremely simple prompts. DO NOT add any detail, just use it AS-IS: {prompt}",
-			"size": size,
-			"quality": quality,
-			"n": 1
+			"prompt": (
+				"I NEED to test how the tool works with extremely simple prompts. "
+				f"DO NOT add any detail, just use it AS-IS: {prompt}"
+			),
+			"size": size, "quality": quality, "n": 1
 		}
 		try:
-			async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=90)) as s:
-				async with s.post("https://api.openai.com/v1/images/generations", data=json.dumps(data), headers=headers) as r:
-					r.raise_for_status()
-					response = await r.json()
-					revised_prompt = response["data"][0]["revised_prompt"]
-					image_url = response["data"][0]["url"]
-					created = datetime.fromtimestamp(response["created"], tz=tz)
-					processing_ms = r.headers["openai-processing-ms"]
-
-				async with s.get(image_url) as r:
-					r.raise_for_status()
-					image_raw = await r.read()
+			async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=90)) as session:
+				async with session.post(
+					"https://api.openai.com/v1/images/generations", json=data, headers=headers
+				) as response:
+					response.raise_for_status()
+					result = await response.json()
+					revised_prompt = result["data"][0]["revised_prompt"]
+					image_url = result["data"][0]["url"]
+					created = datetime.fromtimestamp(result["created"], tz=tz)
+					processing_ms = response.headers.get("openai-processing-ms", "?")
+				async with session.get(image_url) as response:
+					response.raise_for_status()
+					image_raw = await response.read()
 					image_name = yarl.URL(image_url).name
 					image_pil = Image.open(BytesIO(image_raw)).convert("RGB")
 					image_info = {
-						"prompt": prompt,
-						"revised": revised_prompt,
-						"size": size,
-						"quality": quality,
-						"model": self.model_image
+						"prompt": prompt, "revised": revised_prompt, "size": size,
+						"quality": quality, "model": self.model_image
 					}
-					image_with_info = stepic.encode(image_pil, json.dumps(image_info, ensure_ascii=False).encode())
+					image_with_info = stepic.encode(
+						image_pil, json.dumps(image_info, ensure_ascii=False).encode()
+					)
 					image_buffer = BytesIO()
 					image_with_info.save(image_buffer, format="PNG")
 		except Exception as e:
-			await ctx.followup.send(f"Request failed! |  {e}", ephemeral=True)
+			await ctx.followup.send(f"Request failed! | {e}", ephemeral=True)
 			return
-
 		embed_list = []
-		embed = discord.Embed(color=discord.Colour(196287), description=prompt)
-		embed.set_author(name=ctx.user.display_name, icon_url=ctx.user.avatar.url)
+		embed = discord.Embed(color=discord.Colour(196287), description=prompt[:4096])
+		embed.set_author(name=ctx.user.display_name, icon_url=ctx.user.display_avatar.url)
 		embed_list.append(embed)
-
-		embed = discord.Embed(color=discord.Colour(196193), description=revised_prompt)
+		embed = discord.Embed(color=discord.Colour(196193), description=revised_prompt[:4096])
 		embed.set_author(name="OpenAI")
-		embed.set_footer(text=f'{self.model_image} | {size} | {quality} | {processing_ms}ms')
+		embed.set_footer(text=f"{self.model_image} | {size} | {quality} | {processing_ms}ms")
 		embed.timestamp = created
 		image_buffer.seek(0)
 		file = discord.File(fp=image_buffer, filename=image_name)
 		embed.set_image(url=f"attachment://{image_name}")
 		embed_list.append(embed)
 		await ctx.followup.send(embeds=embed_list, file=file)
+
 
 async def setup(bot):
 	chatgptcog = ChatGPT(bot)

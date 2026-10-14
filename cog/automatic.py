@@ -129,6 +129,29 @@ class Automatic(commands.Cog):
 				db.commit()
 				logging.info(f"Updated {len(cursor)} youtube subscribe")
 
+	def cleanup_expired_files(self):
+		now = int(datetime.datetime.now())
+
+		database_path = config.dir / "database" / "chatgpt.db"
+		
+		with sqlite3.connect(database_path) as db:
+			rows = db.execute(
+				"SELECT id FROM files WHERE expires_at <= ?",
+				(now,)
+			).fetchall()
+
+			file_dir = config.dir / "data" / "chatgpt" / "files"
+
+			for (file_id,) in rows:
+				(file_dir / file_id).unlink(missing_ok=True)
+
+				db.execute(
+					"DELETE FROM files WHERE id = ?",
+					(file_id,)
+				)
+
+			db.commit()
+
 	async def update_certificates(self):
 		domain_list = [
 			{
