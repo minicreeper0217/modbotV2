@@ -131,7 +131,7 @@ class Automatic(commands.Cog):
 				logging.info(f"Updated {len(cursor)} youtube subscribe")
 
 	def cleanup_expired_files(self):
-		now = int(datetime.datetime.now())
+		now = int(datetime.datetime.now().timestamp())
 
 		database_path = config.dir / "database" / "chatgpt.db"
 		

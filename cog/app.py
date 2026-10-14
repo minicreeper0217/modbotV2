@@ -1116,7 +1116,7 @@ class APP(commands.Cog):
 		filename, expires_at = row
 
 		# 檢查有效期限
-		if int(datetime.datetime.now()) >= expires_at:
+		if int(datetime.datetime.now().timestamp()) >= expires_at:
 			return web.Response(status=410,text="File expired")
 
 		# URL 的到期時間必須與資料庫一致
