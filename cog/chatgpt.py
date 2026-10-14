@@ -585,6 +585,8 @@ class ChatGPT(commands.Cog):
 					data["tool_choice"] = "auto" if round_index < self.MAX_TOOL_ROUNDS else "none"
 
 				result = None
+				message_phases = {}
+				last_text_item = None
 				async with session.post("https://api.openai.com/v1/responses", json=data, headers=headers) as response:
 					if response.status != 200:
 						body = await response.text()
@@ -605,7 +607,21 @@ class ChatGPT(commands.Cog):
 								current = event["response"]
 								res_cls.completion_id = current.get("id")
 								res_cls.model = current.get("model")
+							case "response.output_item.added":
+								item = event.get("item", {})
+
+								if item.get("type") == "message":
+									message_phases[event["output_index"]] = item.get("phase")
 							case "response.output_text.delta":
+								output_index = event.get("output_index")
+								current_item = (round_index, output_index)
+
+								if current_item != last_text_item:
+									if res_cls.assistant_msg:
+										res_cls.assistant_msg += "\n\n"
+
+									last_text_item = current_item
+
 								res_cls.assistant_msg += event["delta"]
 								res_cls.first_token.set()
 							case "response.reasoning_summary_text.delta":
