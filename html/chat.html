@@ -144,11 +144,11 @@ fetch(`/api/chatlog/${chatid}`)
    });
    return details;
   }
-  function messageBlock(text, label = 'Assistant') {
+  function messageBlock(text) {
    const block = document.createElement('div');
    const title = document.createElement('div');
    title.classList.add('role-label');
-   title.textContent = `[${label}]`;
+   title.textContent = '[Assistant]';
    const content = document.createElement('div');
    content.classList.add('message-content');
    content.innerHTML = md.render(text);
@@ -167,11 +167,7 @@ fetch(`/api/chatlog/${chatid}`)
     container.appendChild(renderEditableBlock(entry, index, 'assistant', 'Assistant'));
     return;
    }
-   if (editingState && editingState.index === index && editingState.field === 'assistant') {
-    container.appendChild(renderEditableBlock(entry, index, 'assistant', 'Assistant'));
-    return;
-   }
-   // 在下一段 Assistant 文字出現前，先把連續的工具呼叫合成一組。
+   // 有工具呼叫時，助理文字來自 response_items；編輯功能會被停用。
    const outputs = new Map(items.filter(item => item && item.type === 'function_call_output' && item.call_id != null)
     .map(item => [item.call_id, item.output]));
    let pendingCalls = [];
@@ -196,12 +192,10 @@ fetch(`/api/chatlog/${chatid}`)
    }
    flushCalls();
    const full = typeof entry.assistant === 'string' ? entry.assistant : '';
-   // assistant 是整段回覆，避免把已顯示的文字重複印一次。
+   // assistant 是整段文字。只補上 response_items 未記錄的部分，不重複顯示。
    if (!recordedText) container.appendChild(messageBlock(full));
    else if (full.startsWith(recordedText) && full.length > recordedText.length) {
     container.appendChild(messageBlock(full.slice(recordedText.length)));
-   } else if (full && full !== recordedText) {
-    container.appendChild(messageBlock(full, '編輯後的完整回覆'));
    }
   }
 
@@ -264,6 +258,10 @@ fetch(`/api/chatlog/${chatid}`)
     const editAssistantButton = document.createElement('button');
     editAssistantButton.textContent = 'Edit Assistant';
     editAssistantButton.classList.add('editButton', 'editAssistantButton');
+    // 防止修改 assistant 後與分段的 response_items 不一致。
+    editAssistantButton.disabled = Array.isArray(entry.response_items) &&
+     entry.response_items.some(item => item && item.type === 'function_call');
+    if (editAssistantButton.disabled) editAssistantButton.title = '此對話有工具呼叫，無法編輯助理訊息';
     editAssistantButton.addEventListener('click', () => startEdit(entry, index, 'assistant'));
     conversationDiv.appendChild(editAssistantButton);
    }
