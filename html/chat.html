@@ -66,10 +66,13 @@ button:disabled { opacity: 0.5; pointer-events: none; }
  .modelInfo { right: 12rem; max-width: 25%; font-size: 12px; }
  .editUserButton { right: 7rem; }
 }
-/* 新增工具紀錄樣式，不修改原本按鈕的位置和樣式。 */
+/* 只新增工具紀錄專用樣式；原本按鈕與頁面配置不變。 */
 .tool-event { margin: 10px 0; padding: 8px; border: 1px solid #ccc; border-radius: 5px; }
 .tool-event summary { cursor: pointer; font-weight: bold; overflow-wrap: anywhere; }
 .tool-event pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; font-size: 13px; }
+.tool-call { margin-top: 10px; padding: 8px; border-left: 3px solid #5865f2; }
+.tool-name { font-weight: bold; font-family: monospace; overflow-wrap: anywhere; }
+.tool-label { margin: 8px 0 4px; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -111,14 +114,34 @@ fetch(`/api/chatlog/${chatid}`)
     return JSON.stringify({ ...result, ...('content' in result ? { content: '（檔案內容已隱藏）' } : {}) }, null, 2);
    } catch { return '（結果格式無法解析，已隱藏）'; }
   }
-  function toolEvent(title, body) {
+  function toolGroup(calls, outputs) {
    const details = document.createElement('details');
    details.classList.add('tool-event');
    const summary = document.createElement('summary');
-   summary.textContent = title;
-   const pre = document.createElement('pre');
-   pre.textContent = body; // 工具結果只當純文字，不能執行 HTML
-   details.append(summary, pre);
+   summary.textContent = `${calls.length} 個工具呼叫`;
+   details.appendChild(summary);
+   calls.forEach((call, index) => {
+    const block = document.createElement('section');
+    block.classList.add('tool-call');
+    const name = document.createElement('div');
+    name.classList.add('tool-name');
+    name.textContent = `${index + 1}. ${call.name || '未知工具'}`;
+    block.appendChild(name);
+    const result = outputs.get(call.call_id);
+    const fields = [
+     ['參數', toolArguments(call)],
+     ['結果', result === undefined ? '沒有找到對應的工具結果' : toolOutput(call.name, result)]
+    ];
+    for (const [label, text] of fields) {
+     const heading = document.createElement('div');
+     heading.classList.add('tool-label');
+     heading.textContent = label;
+     const pre = document.createElement('pre');
+     pre.textContent = text; // 不把工具資料當 HTML 執行
+     block.append(heading, pre);
+    }
+    details.appendChild(block);
+   });
    return details;
   }
   function messageBlock(text, label = 'Assistant') {
@@ -144,28 +167,36 @@ fetch(`/api/chatlog/${chatid}`)
     container.appendChild(renderEditableBlock(entry, index, 'assistant', 'Assistant'));
     return;
    }
-   // 編輯模式仍可修改完整回覆；不把工具結果寫進 assistant 文字。
    if (editingState && editingState.index === index && editingState.field === 'assistant') {
     container.appendChild(renderEditableBlock(entry, index, 'assistant', 'Assistant'));
     return;
    }
-   const names = new Map(items.filter(item => item && item.type === 'function_call' && item.call_id != null)
-    .map(item => [item.call_id, item.name || '未知工具']));
+   // 在下一段 Assistant 文字出現前，先把連續的工具呼叫合成一組。
+   const outputs = new Map(items.filter(item => item && item.type === 'function_call_output' && item.call_id != null)
+    .map(item => [item.call_id, item.output]));
+   let pendingCalls = [];
    let recordedText = '';
-   for (const item of items) {
-    if (!item) continue;
-    if (item.type === 'message' && (item.role === 'assistant' || !item.role)) {
-     const text = messageText(item);
-     if (text) { recordedText += text; container.appendChild(messageBlock(text)); }
-    } else if (item.type === 'function_call') {
-     container.appendChild(toolEvent(`呼叫工具：${item.name || '未知工具'}`, toolArguments(item)));
-    } else if (item.type === 'function_call_output') {
-     const name = names.get(item.call_id) || '未知工具';
-     container.appendChild(toolEvent(`工具結果：${name}`, toolOutput(name, item.output)));
+   function flushCalls() {
+    if (pendingCalls.length) {
+     container.appendChild(toolGroup(pendingCalls, outputs));
+     pendingCalls = [];
     }
    }
+   for (const item of items) {
+    if (!item) continue;
+    if (item.type === 'function_call') pendingCalls.push(item);
+    else if (item.type === 'message' && (item.role === 'assistant' || !item.role)) {
+     const text = messageText(item);
+     if (text) {
+      flushCalls();
+      recordedText += text;
+      container.appendChild(messageBlock(text));
+     }
+    }
+   }
+   flushCalls();
    const full = typeof entry.assistant === 'string' ? entry.assistant : '';
-   // assistant 是整段回覆，避免再印一次；舊資料或手動修改時則顯示沒出現在紀錄中的部分。
+   // assistant 是整段回覆，避免把已顯示的文字重複印一次。
    if (!recordedText) container.appendChild(messageBlock(full));
    else if (full.startsWith(recordedText) && full.length > recordedText.length) {
     container.appendChild(messageBlock(full.slice(recordedText.length)));
