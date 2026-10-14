@@ -257,7 +257,9 @@ class ChatGPT(commands.Cog):
 			"name": "save_file",
 			"description": "Save a UTF-8 text file and return a signed download URL valid for 3 days. "
 										 "Use for generated Python, HTML, JSON, Markdown and other text files. "
-										 "Maximum file size is 1 MB.",
+										 "Maximum file size is 1 MB."
+										 "After a successful save, the system may replace the historical content argument with (deleted) to reduce token usage."
+										 "This is expected and does not mean the saved file is incorrect. Trust the tool's success result.",
 			"strict": True,
 			"parameters": {
 				"type": "object",
@@ -311,6 +313,7 @@ class ChatGPT(commands.Cog):
 		).hexdigest()
 		query = urlencode({"expires": expires_at, "state": state, "token": signature})
 		return {
+			"success": True,
 			"filename": safe_name,
 			"url": f"https://{config.domain}/api/chat-files/{file_id}?{query}",
 			"expires_at": expires_at

@@ -34,6 +34,7 @@ class Automatic(commands.Cog):
 		schedule.every(1).day.at("08:00", tz=tz).do(lambda: asyncio.create_task(self.cat())).tag("automatic")
 		schedule.every(1).day.at("14:00", tz=tz).do(lambda: asyncio.create_task(self.check_ytsubscribe())).tag("automatic")
 		schedule.every(1).day.at("22:00", tz=tz).do(lambda: asyncio.create_task(self.check_ytsubscribe())).tag("automatic")
+		schedule.every(1).day.at("08:00", tz=tz).do(lambda: asyncio.create_task(self.cleanup_expired_files())).tag("automatic")
 		schedule.every(120).seconds.do(lambda: asyncio.create_task(self.auto_clean_messages())).tag("automatic")
 		self.tasks = [
 			asyncio.create_task(self.check_schedule()),
