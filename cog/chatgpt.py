@@ -824,7 +824,7 @@ class ChatGPT(commands.Cog):
 
 	@chatgptcom.command(name="generate")
 	async def generate(self, ctx: discord.Interaction, text: str, chatid: int = None,
-										 max_tokens: int = 8192, image_url: str = None):
+										 max_tokens: int = 8192, attachment: discord.Attachment = None):
 		await ctx.response.defer(ephemeral=True)
 		if ctx.channel.id != self.chatgptchannel:
 			await ctx.followup.send("You can't use this command at this channel!", ephemeral=True)
@@ -841,22 +841,34 @@ class ChatGPT(commands.Cog):
 			return
 		lock = self._chat_locks.setdefault(int(chatid), asyncio.Lock())
 		async with lock:
-			await self._generate_locked(ctx, text, chatid, max_tokens, image_url)
+			await self._generate_locked(ctx, text, chatid, max_tokens, attachment)
 
-	async def _generate_locked(self, ctx, text, chatid, max_tokens, image_url):
+	async def _generate_locked(self, ctx, text, chatid, max_tokens, attachment):
 		chat_config = self.get_chat_config(chatid)
-		# 舊 do-ai.run 介面不支援圖片。
-		if image_url and chat_config["api"] != "responses":
-			await ctx.followup.send("此聊天類型不支援圖片", ephemeral=True)
+
+		if attachment and chat_config["api"] != "responses":
+			await ctx.followup.send("此聊天類型不支援附件", ephemeral=True)
 			return
-		if image_url:
+
+		image_id = None
+		image_url = None
+
+		if attachment:
+			if attachment.content_type not in ("image/png", "image/jpeg", "image/webp"):
+				await ctx.followup.send("目前只支援 PNG、JPEG、WEBP 圖片", ephemeral=True)
+				return
+
+			if attachment.size > 20 * 1024 * 1024:
+				await ctx.followup.send("圖片大小不能超過 20 MB", ephemeral=True)
+				return
+
 			try:
+				image_url = attachment.url
 				image_id = await self.image_pend(image_url)
 			except Exception as e:
 				await ctx.followup.send(str(e), ephemeral=True)
 				return
-		else:
-			image_id = None
+
 		await ctx.followup.send("Please wait...")
 		chat_data, msgid = self.get_chat_data(chatid, api=chat_config["api"])
 		chat_data.append(self._user_input(text, image_id, chat_config["api"]))
