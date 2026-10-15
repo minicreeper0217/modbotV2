@@ -737,7 +737,7 @@ class ChatGPT(commands.Cog):
 			timestamp = int(datetime.now().timestamp())
 			signature = hmac.new(
 				config.secret.encode("UTF-8"),
-				f"{timestamp}-{state}".encode("UTF-8"), hashlib.sha256
+				f"{image_id}-{timestamp}-{state}".encode("UTF-8"), hashlib.sha256
 			).hexdigest()
 			image_url = (
 				f"https://{config.domain}/api/chatgpt/images/{image_id}"

@@ -1069,7 +1069,7 @@ class APP(commands.Cog):
 		token = request.query["token"]
 		if datetime.datetime.now().timestamp() > (state_time + 15):
 			return web.Response(status=400,text="")
-		new_token = hmac.new(bytes(config.secret, "UTF-8"), bytes(f"{state_time}-{state}", "UTF-8"), hashlib.sha256).hexdigest()
+		new_token = hmac.new(bytes(config.secret, "UTF-8"), bytes(f"{image_id}-{state_time}-{state}", "UTF-8"), hashlib.sha256).hexdigest()
 		if hmac.compare_digest(token, new_token):
 			if os.path.isfile(os.path.join(config.dir, 'data', 'chatgpt', 'images', f'{image_id}.png')):
 				with open(os.path.join(config.dir, 'data', 'chatgpt', 'images', f'{image_id}.png'), 'rb') as f:
