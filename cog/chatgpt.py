@@ -105,9 +105,9 @@ class GPTres:
 		except Exception:
 			logging.exception("AI moderation failed")
 			self.assistant_modfoo = ""
-		self.finish = True
 		self.first_token.set()
 		await asyncio.sleep(1.6)
+		self.finish = True
 		await self.send()
 
 	async def moderation(self, text: str) -> str:
