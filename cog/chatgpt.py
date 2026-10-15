@@ -107,6 +107,7 @@ class GPTres:
 			self.assistant_modfoo = ""
 		self.finish = True
 		self.first_token.set()
+		await asyncio.sleep(1.6)
 		await self.send()
 
 	async def moderation(self, text: str) -> str:
