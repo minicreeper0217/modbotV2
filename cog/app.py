@@ -1067,7 +1067,7 @@ class APP(commands.Cog):
 		state_time = int(request.query["time"])
 		state = request.query["state"]
 		token = request.query["token"]
-		if datetime.datetime.now().timestamp() > (state_time + 15):
+		if datetime.datetime.now().timestamp() > (state_time + 45):
 			return web.Response(status=400,text="")
 		new_token = hmac.new(bytes(config.secret, "UTF-8"), bytes(f"{image_id}-{state_time}-{state}", "UTF-8"), hashlib.sha256).hexdigest()
 		if hmac.compare_digest(token, new_token):
