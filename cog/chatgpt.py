@@ -362,82 +362,85 @@ class ChatGPT(commands.Cog):
 				return await self.github.search_code(**args)
 			case _:
 				raise ValueError(f"Unknown tool: {name}")
-
 	@staticmethod
 	def _tool_key(call):
 		try:
 			args = json.loads(call["arguments"])
-			encoded = json.dumps(args, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+
+			if call.get("name") == "save_file":
+				return ("save_file", args["filename"])
+
+			encoded = json.dumps(
+				args, sort_keys=True, ensure_ascii=False,
+				separators=(",", ":")
+			)
 		except (ValueError, TypeError, KeyError):
 			encoded = call.get("arguments", "")
+
 		return (call.get("name"), encoded)
-
-	@staticmethod
-	def cleanup_save_file_calls(items: list):
-		outputs = {
-			item.get("call_id"): item
-			for item in items
-			if item.get("type") == "function_call_output"
-		}
-
-		for item in items:
-			if item.get("type") != "function_call":
-				continue
-
-			if item.get("name") != "save_file":
-				continue
-
-			output = outputs.get(item.get("call_id"))
-			if not output:
-				continue
-
-			try:
-				result = json.loads(output["output"])
-				arguments = json.loads(item["arguments"])
-			except (ValueError, TypeError, KeyError):
-				continue
-
-			# 只有成功儲存的檔案才清理
-			if not isinstance(result, dict) or "url" not in result:
-				continue
-
-			if not isinstance(arguments, dict) or "content" not in arguments:
-				continue
-
-			arguments["content"] = "(deleted)"
-			item["arguments"] = json.dumps(arguments, ensure_ascii=False)
 
 	@classmethod
 	def cleanup_tool_outputs(cls, items: list, new_call_ids: set[str] | None = None) -> set[str]:
-		"""Keep the newest successful output for repeated tool + equivalent JSON arguments.
-
-		Prior call records remain unchanged. Only older function_call_output.output
-		values are replaced by '(deleted)'. Failed NEW calls do not erase prior data.
-		"""
 		outputs = {
 			item.get("call_id"): item
 			for item in items
 			if item.get("type") == "function_call_output"
 		}
 		calls = [item for item in items if item.get("type") == "function_call"]
+
 		if new_call_ids is None:
 			new_call_ids = {call.get("call_id") for call in calls}
 
 		newest_success = {}
+
 		for index, call in enumerate(calls):
 			call_id = call.get("call_id")
-			out = outputs.get(call_id)
-			if call_id in new_call_ids and out and out.get("output") != "(deleted)":
-				newest_success[cls._tool_key(call)] = index
+			output = outputs.get(call_id)
+
+			if call_id not in new_call_ids or not output:
+				continue
+
+			if call.get("name") == "save_file":
+				try:
+					result = json.loads(output["output"])
+					if not isinstance(result, dict) or "url" not in result:
+						continue
+				except (ValueError, TypeError):
+					continue
+			elif output.get("output") == "(deleted)":
+				continue
+
+			newest_success[cls._tool_key(call)] = index
 
 		deleted_ids = set()
+
 		for index, call in enumerate(calls):
 			call_id = call.get("call_id")
-			out = outputs.get(call_id)
+			output = outputs.get(call_id)
 			last_index = newest_success.get(cls._tool_key(call))
-			if last_index is not None and index < last_index and out and out.get("output") != "(deleted)":
-				out["output"] = "(deleted)"
+
+			if last_index is None or index >= last_index or not output:
+				continue
+
+			if call.get("name") == "save_file":
+				try:
+					arguments = json.loads(call["arguments"])
+				except (ValueError, TypeError, KeyError):
+					continue
+
+				if not isinstance(arguments, dict) or arguments.get("content") == "(deleted)":
+					continue
+
+				arguments["content"] = "(deleted)"
+				call["arguments"] = json.dumps(arguments, ensure_ascii=False)
+
+			else:
+				if output.get("output") == "(deleted)":
+					continue
+
+				output["output"] = "(deleted)"
 				deleted_ids.add(call_id)
+
 		return deleted_ids
 
 	def _chat_path(self, chatid):
@@ -688,6 +691,17 @@ class ChatGPT(commands.Cog):
 				if good_ids:
 					# 只清除同工具+同參數的舊結果，且新的呼叫必須成功。
 					deleted_ids = self.cleanup_tool_outputs(inputs, good_ids)
+					call_arguments = {
+						item["call_id"]: item["arguments"]
+						for item in inputs
+						if item.get("type") == "function_call"
+						and item.get("name") == "save_file"
+					}
+
+					for item in res_cls.response_items:
+						if item.get("type") == "function_call":
+							if item.get("call_id") in call_arguments:
+								item["arguments"] = call_arguments[item["call_id"]]
 					res_cls.deleted_call_ids.update(deleted_ids)
 					# inputs 是 deepcopy，所以同一回合的 response_items 也要獨立同步。
 					for item in res_cls.response_items:
@@ -769,7 +783,6 @@ class ChatGPT(commands.Cog):
 				return chat_data, msgid
 			if api == "responses" and "response_items" in entry:
 				response_items = copy.deepcopy(entry["response_items"])
-				self.cleanup_save_file_calls(response_items)
 				chat_data.extend(copy.deepcopy(entry["response_items"]))
 			else:
 				chat_data.append({"role": "assistant", "content": entry["assistant"]})
