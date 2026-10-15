@@ -55,6 +55,33 @@ button:disabled { opacity: 0.5; pointer-events: none; }
 .conversation .hljs-built_in { color: #005cc5; }
 .conversation .hljs-comment { color: #6a737d; }
 .conversation .hljs-title { color: #6f42c1; }
+.conversation .code-block {
+  margin: 10px 0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.conversation .code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background-color: #e5e5e5;
+  font-family: monospace;
+  font-size: 13px;
+}
+.conversation .copy-code-btn {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.conversation .copy-code-btn:hover {
+  text-decoration: underline;
+}
+.conversation .code-block pre {
+  margin: 0;
+  border-radius: 0;
+}
 @media (prefers-color-scheme: dark) {
  body { background-color: #1f1f1f; color: white; }
  .conversation { background-color: #000; }
@@ -74,6 +101,9 @@ button:disabled { opacity: 0.5; pointer-events: none; }
   .conversation .hljs-built_in { color: #79c0ff; }
   .conversation .hljs-comment { color: #8b949e; }
   .conversation .hljs-title { color: #d2a8ff; }
+.conversation .code-header {
+  background-color: #303030;
+}
 }
 @media (max-width: 768px) {
  .modelInfo { right: 12rem; max-width: 25%; font-size: 12px; }
@@ -110,6 +140,21 @@ const md = window.markdownit({
     }
   }
 });
+md.renderer.rules.fence = (tokens, index, options) => {
+  const token = tokens[index];
+  const language = token.info.trim().split(/\s+/)[0] || 'text';
+  const safeLanguage = md.utils.escapeHtml(language);
+  const highlighted = options.highlight(token.content, language);
+  const codeHtml = highlighted || md.utils.escapeHtml(token.content);
+
+  return `<div class="code-block">
+    <div class="code-header">
+      <span>${safeLanguage}</span>
+      <button type="button" class="copy-code-btn">複製</button>
+    </div>
+    <pre><code class="hljs language-${safeLanguage}">${codeHtml}</code></pre>
+  </div>`;
+};
 let editingState = null;
 fetch(`/api/chatlog/${chatid}`)
  .then(response => response.json())
@@ -407,6 +452,22 @@ fetch(`/api/chatlog/${chatid}`)
    try { await newMessages(); }
    finally { newButton.disabled = submitButton.disabled = false; }
   });
+  conversationContainer.addEventListener('click', async event => {
+  const button = event.target.closest('.copy-code-btn');
+  if (!button) return;
+
+  const code = button.closest('.code-block')?.querySelector('code');
+  if (!code) return;
+
+  try {
+    await navigator.clipboard.writeText(code.textContent);
+    button.textContent = '已複製！';
+    setTimeout(() => { button.textContent = '複製'; }, 1500);
+  } catch {
+    button.textContent = '複製失敗';
+    setTimeout(() => { button.textContent = '複製'; }, 1500);
+  }
+});
  }).catch(error => alert(`Error fetching chat log. (${error.status})`));
 </script>
 </body>
