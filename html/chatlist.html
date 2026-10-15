@@ -306,7 +306,7 @@ fetch('/api/log/chatlist')
 
 				oldChatTop.innerHTML =
 					'<div class="chat-title">' +
-					'<span class="' + getChatIdClass(chat) + '">#' + oldData.id + '</span>' +
+					'<span class="' + oldData.idClass + '">#' + oldData.id + '</span>' +
 					oldData.title + '</div>' +
 					'<div class="chat-time">' +
 					(oldData.time ? formatTime(oldData.time) : '') +
@@ -323,7 +323,8 @@ fetch('/api/log/chatlist')
 			item._originalData = {
 				id: id,
 				title: chat.name || "（無標題）",
-				time: chat.updatedAt
+				time: chat.updatedAt,
+				idClass: getChatIdClass(chat)
 			};
 
 			const chatTop = item.querySelector(".chat-top");
@@ -333,7 +334,7 @@ fetch('/api/log/chatlist')
 			renameBox.className = "rename-box";
 
 			renameBox.innerHTML = `
-				<span class=${getChatIdClass(chat)}>#${id}</span>
+				<span class="${getChatIdClass(chat)}">#${id}</span>
 				<input class="rename-input" value="${originalTitle}">
 				<button class="save">✔</button>
 				<button class="cancel">✖</button>
@@ -353,7 +354,7 @@ fetch('/api/log/chatlist')
 				try {
 					chatTop.innerHTML =
 						'<div class="chat-title">' +
-						'<span class=${getChatIdClass(chat)}>#' + id + '</span>' +
+						'<span class="' + getChatIdClass(chat) + '">#' + id + '</span>'
 						newTitle + '</div>' +
 						'<div class="chat-time">' +
 						(chat.updatedAt ? formatTime(chat.updatedAt) : '') +
@@ -369,7 +370,7 @@ fetch('/api/log/chatlist')
 
 					chatTop.innerHTML =
 						'<div class="chat-title">' +
-						'<span class=${getChatIdClass(chat)}>#' + id + '</span>' +
+						'<span class="' + getChatIdClass(chat) + '">#' + id + '</span>'
 						originalTitle + '</div>' +
 						'<div class="chat-time">' +
 						(chat.updatedAt ? formatTime(chat.updatedAt) : '') +
@@ -382,7 +383,7 @@ fetch('/api/log/chatlist')
 			renameBox.querySelector(".cancel").onclick = () => {
 				chatTop.innerHTML =
 					'<div class="chat-title">' +
-					'<span class=${getChatIdClass(chat)}>#' + id + '</span>' +
+					'<span class="' + getChatIdClass(chat) + '">#' + id + '</span>'
 					originalTitle + '</div>' +
 					'<div class="chat-time">' +
 					(chat.updatedAt ? formatTime(chat.updatedAt) : '') +
