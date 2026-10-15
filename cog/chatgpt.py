@@ -1080,6 +1080,8 @@ class ChatGPT(commands.Cog):
 				image_data = base64.b64decode(image_url.split(",", 1)[1])
 			image = Image.open(BytesIO(image_data))
 			image_id = uuid.uuid4().hex
+			image_dir = self._chat_path("images")
+			image_dir.mkdir(parents=True, exist_ok=True)
 			image_path = self._chat_path("images") / f"{image_id}.png"
 			image.save(image_path, format="PNG")
 			return image_id
