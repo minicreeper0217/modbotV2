@@ -85,44 +85,40 @@ class IntroModal(discord.ui.Modal):
 		)
 
 class IntroView(discord.ui.View):
-	def __init__(self, cog, user_id: int):
-		super().__init__(timeout=180)
-		self.cog = cog
-		self.user_id = user_id
+  def __init__(self, cog, user_id: int):
+    super().__init__(timeout=180)
+    self.cog = cog
+    self.user_id = user_id
 
-	async def interaction_check(self, interaction: discord.Interaction):
-		if interaction.user.id != self.user_id:
-			await interaction.response.send_message(
-				"這不是你的操作介面！", ephemeral=True
-			)
-			return False
-		return True
+    for chat_type, emoji, style in (
+      ("c1", "📖", discord.ButtonStyle.success),
+      ("c2", "🐶", discord.ButtonStyle.primary),
+      ("c3", "📝", discord.ButtonStyle.secondary)
+    ):
+      button = discord.ui.Button(
+        label=chat_type.upper(),
+        emoji=emoji,
+        style=style
+      )
 
-	async def open_modal(self, interaction, chat_type):
-		try:
-			modal = IntroModal(self.cog, chat_type)
-			await interaction.response.send_modal(modal)
-		except Exception:
-			logging.exception("無法開啟 %s 指令表單", chat_type)
+      async def callback(interaction: discord.Interaction, selected=chat_type):
+        print(f"收到 {selected} 按鈕互動！", flush=True)
+        await interaction.response.send_modal(
+          IntroModal(self.cog, selected)
+        )
 
-			if not interaction.response.is_done():
-				await interaction.response.send_message(
-					"無法開啟表單，請檢查伺服器紀錄。",
-					ephemeral=True
-				)
+      button.callback = callback
+      self.add_item(button)
 
-	@discord.ui.button(emoji="📖", label="C1", style=discord.ButtonStyle.success)
-	async def c1(self, interaction: discord.Interaction, button: discord.ui.Button):
-		logging.info("C1 按鈕被按下！")
-		await self.open_modal(interaction, "c1")
+  async def interaction_check(self, interaction: discord.Interaction):
+    if interaction.user.id != self.user_id:
+      await interaction.response.send_message(
+        "這不是你的操作介面！",
+        ephemeral=True
+      )
+      return False
 
-	@discord.ui.button(emoji="🐶", label="C2", style=discord.ButtonStyle.primary)
-	async def c2(self, interaction: discord.Interaction, button: discord.ui.Button):
-		await self.open_modal(interaction, "c2")
-
-	@discord.ui.button(emoji="📝", label="C3", style=discord.ButtonStyle.secondary)
-	async def c3(self, interaction: discord.Interaction, button: discord.ui.Button):
-		await self.open_modal(interaction, "c3")
+    return True
 
 class GPTres:
 	def __init__(self, chatid, msgid, ctx: discord.Interaction, color,
