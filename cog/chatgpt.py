@@ -34,6 +34,86 @@ from github import GitHub
 
 tz = pytz.timezone("Asia/Taipei")
 
+class IntroModal(discord.ui.Modal):
+	def __init__(self, cog, chat_type: str):
+		super().__init__(title=f"修改 {chat_type.upper()} 指令")
+
+		self.cog = cog
+		self.chat_type = chat_type
+		self.intro_dir = Path(config.dir) / "data" / "chatgpt" / "intro"
+
+		self.private_intro = discord.ui.TextInput(
+			label="專屬指令",
+			style=discord.TextStyle.paragraph,
+			default=(self.intro_dir / chat_type).read_text(encoding="UTF-8"),
+			required=False,
+			max_length=4000
+		)
+		self.add_item(self.private_intro)
+
+		if chat_type in ("c1", "c2"):
+			self.shared_intro = discord.ui.TextInput(
+				label="共用指令",
+				style=discord.TextStyle.paragraph,
+				default=(self.intro_dir / "c0").read_text(encoding="UTF-8"),
+				required=False,
+				max_length=4000
+			)
+			self.add_item(self.shared_intro)
+
+	async def on_submit(self, interaction: discord.Interaction):
+		if not await self.cog.bot.is_owner(interaction.user):
+			await interaction.response.send_message(
+				"你沒有權限修改指令！", ephemeral=True
+			)
+			return
+
+		(self.intro_dir / self.chat_type).write_text(
+			self.private_intro.value, encoding="UTF-8"
+		)
+
+		if self.chat_type in ("c1", "c2"):
+			(self.intro_dir / "c0").write_text(
+				self.shared_intro.value, encoding="UTF-8"
+			)
+
+		self.cog.reload_intro()
+
+		await interaction.response.send_message(
+			f"✅ {self.chat_type.upper()} 指令已更新！",
+			ephemeral=True
+		)
+
+class IntroView(discord.ui.View):
+	def __init__(self, cog, user_id: int):
+		super().__init__(timeout=180)
+		self.cog = cog
+		self.user_id = user_id
+
+	async def interaction_check(self, interaction: discord.Interaction):
+		if interaction.user.id != self.user_id:
+			await interaction.response.send_message(
+				"這不是你的操作介面！", ephemeral=True
+			)
+			return False
+		return True
+
+	async def open_modal(self, interaction, chat_type):
+		await interaction.response.send_modal(
+			IntroModal(self.cog, chat_type)
+		)
+
+	@discord.ui.button(emoji="📖", label="C1", style=discord.ButtonStyle.success)
+	async def c1(self, interaction: discord.Interaction, button: discord.ui.Button):
+		await self.open_modal(interaction, "c1")
+
+	@discord.ui.button(emoji="🐶", label="C2", style=discord.ButtonStyle.primary)
+	async def c2(self, interaction: discord.Interaction, button: discord.ui.Button):
+		await self.open_modal(interaction, "c2")
+
+	@discord.ui.button(emoji="📝", label="C3", style=discord.ButtonStyle.secondary)
+	async def c3(self, interaction: discord.Interaction, button: discord.ui.Button):
+		await self.open_modal(interaction, "c3")
 
 class GPTres:
 	def __init__(self, chatid, msgid, ctx: discord.Interaction, color,
@@ -172,11 +252,6 @@ class ChatGPT(commands.Cog):
 
 	def __init__(self, bot):
 		self.bot: commands.Bot = bot
-		intro_dir = Path(config.dir) / "data" / "chatgpt" / "intro"
-		c1_intro = (intro_dir / "c1").read_text(encoding="UTF-8")
-		c2_intro = (intro_dir / "c2").read_text(encoding="UTF-8")
-		# 新的 c3 提示詞檔案必須存在。
-		c3_intro = (intro_dir / "c3").read_text(encoding="UTF-8")
 
 		self.route_openai = {"token": config.chatgpt_moderations}
 		self.route_girl = {
@@ -190,18 +265,19 @@ class ChatGPT(commands.Cog):
 		self.chat_types = {
 			"b": {"color": 0x7DD3FC, "api": "completions", "route": self.route_boy},
 			"g": {"color": 0xF9A8D4, "api": "completions", "route": self.route_girl},
-			"c1": {"color": 0x86EFAC, "api": "responses", "instructions": c1_intro},
-			"c2": {"color": 0xC4B5FD, "api": "responses", "instructions": c2_intro},
+			"c1": {"color": 0x86EFAC, "api": "responses", "instructions": ""},
+			"c2": {"color": 0xC4B5FD, "api": "responses", "instructions": ""},
 			"c3": {
 				"color": 0xFBBF24,
 				"api": "responses",
 				"model": "gpt-6-sol",
-				"instructions": c3_intro,
+				"instructions": "",
 				"tools": True,
 				"service_tier": "flex",
 				"max_tokens": 16384
 			}
 		}
+		self.reload_intro()
 		self.model = "gpt-5.6-luna"
 		self.model_image = "gpt-image-2.5-flare"
 		self.chatgptchannel = config.chatgpt_channel
@@ -474,6 +550,18 @@ class ChatGPT(commands.Cog):
 		if changed:
 			self._write_json(path, log)
 
+		def reload_intro(self):
+			intro_dir = Path(config.dir) / "data" / "chatgpt" / "intro"
+
+			c0 = (intro_dir / "c0").read_text(encoding="UTF-8")
+			c1 = (intro_dir / "c1").read_text(encoding="UTF-8")
+			c2 = (intro_dir / "c2").read_text(encoding="UTF-8")
+			c3 = (intro_dir / "c3").read_text(encoding="UTF-8")
+
+			self.chat_types["c1"]["instructions"] = f"{c1}\n\n***\n\n{c0}"
+			self.chat_types["c2"]["instructions"] = f"{c2}\n\n***\n\n{c0}"
+			self.chat_types["c3"]["instructions"] = c3
+		
 	def num_tokens_from_messages(self, messages: list, model: str):
 		try:
 			encoding = tiktoken.encoding_for_model(model)
@@ -791,6 +879,20 @@ class ChatGPT(commands.Cog):
 			if message_id is not None and is_target:
 				return chat_data, msgid
 		return chat_data, msgid
+
+	@chatgptcom.command(name="intro", description="Modify agent instructions")
+	async def intro(self, ctx: discord.Interaction):
+		if not await self.bot.is_owner(ctx.user):
+			await ctx.response.send_message(
+				"你沒有權限修改指令！", ephemeral=True
+			)
+			return
+
+		await ctx.response.send_message(
+			"請問要修改哪個？",
+			view=IntroView(self, ctx.user.id),
+			ephemeral=True
+		)
 
 	@chatgptcom.command(name="model")
 	async def GPT_model(self, ctx: discord.Interaction, model: int):
