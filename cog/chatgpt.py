@@ -274,14 +274,14 @@ class ChatGPT(commands.Cog):
 				"api": "responses",
 				"instructions": "",
 				"reasoning_effort": "medium",
-				"verbosity": "medium"
+				"verbosity": "high"
 			},
 			"c2": {
 				"color": 0xC4B5FD,
 				"api": "responses",
 				"instructions": "",
 				"reasoning_effort": "medium",
-				"verbosity": "medium"
+				"verbosity": "high"
 			},
 			"c3": {
 				"color": 0xFBBF24,
@@ -882,7 +882,7 @@ class ChatGPT(commands.Cog):
 			if entry["id"] == 0:
 				system_content = (
 					"Region: Japan\n"
-					f"Time Now: {datetime.now(tz=pytz.timezone('Asia/Tokyo')).isoformat(timespec='seconds')}\n"
+					f"Time Now: {datetime.now(tz=tz).isoformat(timespec='seconds')}\n"
 					"Note: The time will be updated each time it is sent.\n\n"
 					f"{entry['system']}"
 				)
@@ -897,7 +897,7 @@ class ChatGPT(commands.Cog):
 				return chat_data, msgid
 			if api == "responses" and "response_items" in entry:
 				response_items = copy.deepcopy(entry["response_items"])
-				chat_data.extend(copy.deepcopy(entry["response_items"]))
+				chat_data.extend(response_items)
 			else:
 				chat_data.append({"role": "assistant", "content": entry["assistant"]})
 			if message_id is not None and is_target:
