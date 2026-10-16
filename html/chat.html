@@ -246,21 +246,24 @@
 		.reasoning-box.show {
 			display: block;
 		}
+		.conversation .code-block pre {
+			color: #1f2328;
+		}
 		.conversation .hljs-keyword {
-			color: #d73a49;
+			color: #0000cc;
 		}
 		.conversation .hljs-string {
-			color: #032f62;
+			color: #a31515;
 		}
-		.conversation .hljs-number,
-		.conversation .hljs-built_in {
-			color: #005cc5;
+		.conversation .hljs-number {
+			color: #087443;
+		}
+		.conversation .hljs-built_in,
+		.conversation .hljs-title {
+			color: #7040a0;
 		}
 		.conversation .hljs-comment {
-			color: #6a737d;
-		}
-		.conversation .hljs-title {
-			color: #6f42c1;
+			color: #586069;
 		}
 		.conversation .code-block {
 			margin: 10px 0;
@@ -331,24 +334,21 @@
 			.reasoning-box {
 				background-color: #1a1a1a;
 			}
-			.conversation .code-block pre { 
-				color: #1f2328; 
+			.conversation .hljs-keyword {
+				color: #ff7b72;
 			}
-			.conversation .hljs-keyword { 
-				color: #0000cc; 
+			.conversation .hljs-string {
+				color: #a5d6ff;
 			}
-			.conversation .hljs-string { 
-				color: #a31515; 
+			.conversation .hljs-number,
+			.conversation .hljs-built_in {
+				color: #79c0ff;
 			}
-			.conversation .hljs-number { 
-				color: #087443; 
+			.conversation .hljs-comment {
+				color: #8b949e;
 			}
-			.conversation .hljs-built_in,
-			.conversation .hljs-title { 
-				color: #7040a0; 
-			}
-			.conversation .hljs-comment { 
-				color: #586069; 
+			.conversation .hljs-title {
+				color: #d2a8ff;
 			}
 		}
 		@media (max-width: 768px) {
