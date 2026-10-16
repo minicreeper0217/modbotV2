@@ -99,9 +99,17 @@ class IntroView(discord.ui.View):
 		return True
 
 	async def open_modal(self, interaction, chat_type):
-		await interaction.response.send_modal(
-			IntroModal(self.cog, chat_type)
-		)
+		try:
+			modal = IntroModal(self.cog, chat_type)
+			await interaction.response.send_modal(modal)
+		except Exception:
+			logging.exception("無法開啟 %s 指令表單", chat_type)
+
+			if not interaction.response.is_done():
+				await interaction.response.send_message(
+					"無法開啟表單，請檢查伺服器紀錄。",
+					ephemeral=True
+				)
 
 	@discord.ui.button(emoji="📖", label="C1", style=discord.ButtonStyle.success)
 	async def c1(self, interaction: discord.Interaction, button: discord.ui.Button):
