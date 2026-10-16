@@ -198,7 +198,8 @@ class ChatGPT(commands.Cog):
 				"model": "gpt-6-sol",
 				"instructions": c3_intro,
 				"tools": True,
-				"service_tier": "flex"
+				"service_tier": "flex",
+				"max_tokens": 16384
 			}
 		}
 		self.model = "gpt-5.6-luna"
@@ -804,15 +805,16 @@ class ChatGPT(commands.Cog):
 	async def _respond(self, chatid, chat_config, chat_data, max_tokens, res_cls):
 		if chat_config["api"] == "responses":
 			return await self.chat_responses(
-				message=chat_data, max_tokens=max_tokens, chatid=chatid,
+				message=chat_data, chatid=chatid,
 				instructions=chat_config["instructions"], res_cls=res_cls,
+				max_tokens=max_tokens or chat_config.get("max_tokens") or 8192,
 				model=chat_config.get("model"),
 				tools=self.c3_tools if chat_config.get("tools") else None,
 				persist_history=False,
 				service_tier=chat_config.get("service_tier")
 			)
 		return await self.chat(
-			message=chat_data, max_tokens=max_tokens, chatid=chatid,
+			message=chat_data, max_tokens=max_tokens or 8192, chatid=chatid,
 			res_cls=res_cls, **chat_config["route"]
 		)
 
@@ -825,7 +827,7 @@ class ChatGPT(commands.Cog):
 
 	@chatgptcom.command(name="generate")
 	async def generate(self, ctx: discord.Interaction, text: str, chatid: int = None,
-										 max_tokens: int = 8192, attachment: discord.Attachment = None):
+										 max_tokens: int | None = None, attachment: discord.Attachment = None):
 		await ctx.response.defer(ephemeral=True)
 		if ctx.channel.id != self.chatgptchannel:
 			await ctx.followup.send("You can't use this command at this channel!", ephemeral=True)
@@ -921,7 +923,7 @@ class ChatGPT(commands.Cog):
 
 	@chatgptcom.command(name="regenerate")
 	async def regenerate(self, ctx: discord.Interaction, chatid: int = None,
-											 max_tokens: int = 8192, message_id: int = None):
+											 max_tokens: int | None = None, message_id: int = None):
 		await ctx.response.defer(ephemeral=True)
 		if ctx.channel.id != self.chatgptchannel:
 			await ctx.followup.send("You can't use this command at this channel!", ephemeral=True)
