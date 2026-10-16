@@ -550,17 +550,17 @@ class ChatGPT(commands.Cog):
 		if changed:
 			self._write_json(path, log)
 
-		def reload_intro(self):
-			intro_dir = Path(config.dir) / "data" / "chatgpt" / "intro"
+	def reload_intro(self):
+		intro_dir = Path(config.dir) / "data" / "chatgpt" / "intro"
 
-			c0 = (intro_dir / "c0").read_text(encoding="UTF-8")
-			c1 = (intro_dir / "c1").read_text(encoding="UTF-8")
-			c2 = (intro_dir / "c2").read_text(encoding="UTF-8")
-			c3 = (intro_dir / "c3").read_text(encoding="UTF-8")
+		c0 = (intro_dir / "c0").read_text(encoding="UTF-8")
+		c1 = (intro_dir / "c1").read_text(encoding="UTF-8")
+		c2 = (intro_dir / "c2").read_text(encoding="UTF-8")
+		c3 = (intro_dir / "c3").read_text(encoding="UTF-8")
 
-			self.chat_types["c1"]["instructions"] = f"{c1}\n\n***\n\n{c0}"
-			self.chat_types["c2"]["instructions"] = f"{c2}\n\n***\n\n{c0}"
-			self.chat_types["c3"]["instructions"] = c3
+		self.chat_types["c1"]["instructions"] = f"{c1}\n\n***\n\n{c0}"
+		self.chat_types["c2"]["instructions"] = f"{c2}\n\n***\n\n{c0}"
+		self.chat_types["c3"]["instructions"] = c3
 		
 	def num_tokens_from_messages(self, messages: list, model: str):
 		try:
