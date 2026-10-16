@@ -102,7 +102,6 @@ class IntroView(discord.ui.View):
       )
 
       async def callback(interaction: discord.Interaction, selected=chat_type):
-        print(f"收到 {selected} 按鈕互動！", flush=True)
         await interaction.response.send_modal(
           IntroModal(self.cog, selected)
         )
@@ -270,8 +269,20 @@ class ChatGPT(commands.Cog):
 		self.chat_types = {
 			"b": {"color": 0x7DD3FC, "api": "completions", "route": self.route_boy},
 			"g": {"color": 0xF9A8D4, "api": "completions", "route": self.route_girl},
-			"c1": {"color": 0x86EFAC, "api": "responses", "instructions": ""},
-			"c2": {"color": 0xC4B5FD, "api": "responses", "instructions": ""},
+			"c1": {
+				"color": 0x86EFAC,
+				"api": "responses",
+				"instructions": "",
+				"reasoning_effort": "low",
+				"verbosity": "medium"
+			},
+			"c2": {
+				"color": 0xC4B5FD,
+				"api": "responses",
+				"instructions": "",
+				"reasoning_effort": "low",
+				"verbosity": "medium"
+			},
 			"c3": {
 				"color": 0xFBBF24,
 				"api": "responses",
@@ -650,7 +661,8 @@ class ChatGPT(commands.Cog):
 	async def chat_responses(self, message: list, max_tokens: int, chatid: str | int,
 													 instructions: str, res_cls: GPTres,
 													 model: str | None = None, tools: list | None = None,
-													 persist_history: bool = True, service_tier: str | None = None) -> GPTres:
+													 persist_history: bool = True, service_tier: str | None = None,
+													 reasoning_effort: str | None = None, verbosity: str | None = None) -> GPTres:
 		chat_uuid = self.chatgptdb.execute(
 			"SELECT uuid FROM list WHERE id = ?", (int(chatid),)
 		).fetchone()[0]
@@ -678,6 +690,11 @@ class ChatGPT(commands.Cog):
 					"include": ["reasoning.encrypted_content"],
 					"safety_identifier": chat_uuid
 				}
+				if reasoning_effort is not None:
+					data["reasoning"] = {"effort": reasoning_effort}
+
+				if verbosity is not None:
+					data["text"] = {"verbosity": verbosity}
 				if tools:
 					data["tools"] = tools
 					data["tool_choice"] = "auto" if round_index < self.MAX_TOOL_ROUNDS else "none"
@@ -918,7 +935,9 @@ class ChatGPT(commands.Cog):
 				model=chat_config.get("model"),
 				tools=self.c3_tools if chat_config.get("tools") else None,
 				persist_history=False,
-				service_tier=chat_config.get("service_tier")
+				service_tier=chat_config.get("service_tier"),
+				reasoning_effort=chat_config.get("reasoning_effort"),
+				verbosity=chat_config.get("verbosity")
 			)
 		return await self.chat(
 			message=chat_data, max_tokens=max_tokens or 8192, chatid=chatid,
