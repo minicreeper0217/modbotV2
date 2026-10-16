@@ -113,6 +113,7 @@ class IntroView(discord.ui.View):
 
 	@discord.ui.button(emoji="📖", label="C1", style=discord.ButtonStyle.success)
 	async def c1(self, interaction: discord.Interaction, button: discord.ui.Button):
+		logging.info("C1 按鈕被按下！")
 		await self.open_modal(interaction, "c1")
 
 	@discord.ui.button(emoji="🐶", label="C2", style=discord.ButtonStyle.primary)
