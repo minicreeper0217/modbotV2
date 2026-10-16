@@ -691,8 +691,10 @@ class ChatGPT(commands.Cog):
 					"safety_identifier": chat_uuid
 				}
 				if reasoning_effort is not None:
-					data["reasoning"] = {"effort": reasoning_effort}
-
+					data["reasoning"] = {
+						"effort": reasoning_effort,
+						"summary": "auto"
+						}
 				if verbosity is not None:
 					data["text"] = {"verbosity": verbosity}
 				if tools:
