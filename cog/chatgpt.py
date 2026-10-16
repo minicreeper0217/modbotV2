@@ -832,7 +832,7 @@ class ChatGPT(commands.Cog):
 		if ctx.channel.id != self.chatgptchannel:
 			await ctx.followup.send("You can't use this command at this channel!", ephemeral=True)
 			return
-		if max_tokens % 4 != 0 or max_tokens <= 0:
+		if max_tokens is not None and (max_tokens % 4 != 0 or max_tokens <= 0):
 			await ctx.followup.send("Invalid max tokens number", ephemeral=True)
 			return
 		if chatid is None:
@@ -928,7 +928,7 @@ class ChatGPT(commands.Cog):
 		if ctx.channel.id != self.chatgptchannel:
 			await ctx.followup.send("You can't use this command at this channel!", ephemeral=True)
 			return
-		if max_tokens % 4 != 0 or max_tokens <= 0:
+		if max_tokens is not None and (max_tokens % 4 != 0 or max_tokens <= 0):
 			await ctx.followup.send("Invalid max tokens number", ephemeral=True)
 			return
 		if chatid is None:
