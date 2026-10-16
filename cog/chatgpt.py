@@ -273,14 +273,14 @@ class ChatGPT(commands.Cog):
 				"color": 0x86EFAC,
 				"api": "responses",
 				"instructions": "",
-				"reasoning_effort": "low",
+				"reasoning_effort": "medium",
 				"verbosity": "medium"
 			},
 			"c2": {
 				"color": 0xC4B5FD,
 				"api": "responses",
 				"instructions": "",
-				"reasoning_effort": "low",
+				"reasoning_effort": "medium",
 				"verbosity": "medium"
 			},
 			"c3": {
