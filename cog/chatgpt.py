@@ -751,7 +751,7 @@ class ChatGPT(commands.Cog):
 									message_phases[event["output_index"]] = item.get("phase")
 							case "response.output_text.delta":
 								output_index = event.get("output_index")
-								current_item = (round_index, output_index)
+								current_item = (stage_index, output_index)
 
 								if current_item != last_text_item:
 									if res_cls.assistant_msg:
