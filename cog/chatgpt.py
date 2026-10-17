@@ -676,9 +676,18 @@ class ChatGPT(commands.Cog):
 		timeout = aiohttp.ClientTimeout(total=None, sock_connect=30, sock_read=610)
 		start_time = time.perf_counter()
 		total_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+		last_reasoning_item = None
 
 		async with aiohttp.ClientSession(timeout=timeout) as session:
-			for round_index in range(self.MAX_TOOL_ROUNDS + 1):
+			for stage_index in range(self.MAX_TOOL_ROUNDS * 2):
+				round_index = stage_index // 2
+
+				if stage_index % 2 == 0:
+					stage = "tools"
+				elif round_index == self.MAX_TOOL_ROUNDS - 1:
+					stage = "final"
+				else:
+					stage = "commentary"
 				data = {
 					"model": model or self.model,
 					"instructions": instructions,
@@ -686,20 +695,31 @@ class ChatGPT(commands.Cog):
 					"max_output_tokens": max_tokens,
 					"stream": True,
 					"store": False,
+					"reasoning": {"summary": "auto"},
 					"service_tier": service_tier or "default",
 					"include": ["reasoning.encrypted_content"],
 					"safety_identifier": chat_uuid
 				}
 				if reasoning_effort is not None:
-					data["reasoning"] = {
-						"effort": reasoning_effort,
-						"summary": "auto"
-						}
+					data["reasoning"]["effort"] = reasoning_effort
 				if verbosity is not None:
 					data["text"] = {"verbosity": verbosity}
 				if tools:
 					data["tools"] = tools
-					data["tool_choice"] = "auto" if round_index < self.MAX_TOOL_ROUNDS else "none"
+					data["tool_choice"] = "auto" if stage == "tools" else "none"
+
+				if stage == "commentary":
+					data["instructions"] += (
+						"\n\nProvide a brief progress update for the user based on "
+						"the tool results. Explain what you have found and what "
+						"you will investigate next, or provide the final answer."
+					)
+
+				elif stage == "final":
+					data["instructions"] += (
+						"\n\nAll tool rounds are complete. "
+						"Provide the final answer using the available information."
+					)
 
 				result = None
 				message_phases = {}
@@ -742,6 +762,18 @@ class ChatGPT(commands.Cog):
 								res_cls.assistant_msg += event["delta"]
 								res_cls.first_token.set()
 							case "response.reasoning_summary_text.delta":
+								current_item = (
+									stage_index,
+									event.get("output_index"),
+									event.get("summary_index")
+								)
+
+								if current_item != last_reasoning_item:
+									if res_cls.assistant_reasoning:
+										res_cls.assistant_reasoning += "\n\n"
+
+									last_reasoning_item = current_item
+
 								res_cls.assistant_reasoning += event["delta"]
 							case "response.completed":
 								result = event["response"]
@@ -766,7 +798,31 @@ class ChatGPT(commands.Cog):
 				# 深複製不是必需，但可明確保證 outputs 不會被意外共用。
 				inputs.extend(copy.deepcopy(output_items))
 				res_cls.response_items.extend(copy.deepcopy(output_items))
-				calls = [item for item in output_items if item.get("type") == "function_call"]
+				calls = [
+					item for item in output_items
+					if item.get("type") == "function_call"
+				]
+
+				if stage == "commentary":
+					if calls:
+						raise RuntimeError("Unexpected tool calls during commentary")
+
+					phases = set(message_phases.values())
+
+					if "final_answer" in phases:
+						await res_cls.done(
+							round(time.perf_counter() - start_time, 2)
+						)
+						return res_cls
+
+					continue
+
+				if stage == "final":
+					if calls:
+						raise RuntimeError("Unexpected tool calls during final answer")
+					await res_cls.done(round(time.perf_counter() - start_time, 2))
+					return res_cls
+
 				if not calls:
 					await res_cls.done(round(time.perf_counter() - start_time, 2))
 					return res_cls
