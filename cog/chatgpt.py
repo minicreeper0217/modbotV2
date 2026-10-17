@@ -248,7 +248,7 @@ class GPTres:
 
 class ChatGPT(commands.Cog):
 	chatgptcom = app_commands.Group(name="chatgpt", description="chat with chatgpt")
-	MAX_TOOL_ROUNDS = 5
+	MAX_TOOL_ROUNDS = 3
 	MAX_CALLS_PER_ROUND = 3
 	MAX_TOOL_OUTPUT_BYTES = 200_000
 	MAX_SAVED_FILE_BYTES = 1_000_000
