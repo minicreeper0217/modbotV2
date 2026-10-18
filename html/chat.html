@@ -122,9 +122,30 @@
 			background: var(--surface-soft);
 			color: var(--muted);
 		}
-		.table-scroll { max-width: 100%; overflow-x: auto; margin: 12px 0; }
-		.table-scroll table { width: 100%; border-collapse: collapse; font-size: .95em; }
-		.table-scroll th, .table-scroll td { border: 1px solid var(--border); padding: 7px 10px; text-align: left; }
+		.table-scroll {
+			max-width: 100%;
+			overflow-x: auto;
+			margin: 12px 0;
+		}
+
+		.table-scroll table {
+				width: max-content; /* 欄位需要多少寬度，就讓表格長多少 */
+				min-width: 100%;    /* 短表格仍填滿容器 */
+				border-collapse: collapse;
+				font-size: .95em;
+		}
+
+		.table-scroll th,
+		.table-scroll td {
+				min-width: 100px;
+				padding: 7px 10px;
+				border: 1px solid var(--border);
+				text-align: left;
+				white-space: nowrap;   /* 不要把檔名拆成一個字母一行 */
+				overflow-wrap: normal;
+				word-break: normal;
+		}
+
 		.table-scroll th { background: var(--surface-soft); }
 		.message-content pre, .reasoning-box pre, .tool-event pre {
 			max-width: 100%; overflow: auto; padding: 12px; background: var(--surface-soft); border-radius: 8px;
@@ -228,9 +249,21 @@
 			.edit-save, .edit-cancel { min-height: 44px; }
 		}
 		@media (max-width: 400px) {
-			.modelInfo { flex-basis: 100%; }
-			.section-header { flex-wrap: wrap; }
+				.conversation-identity {
+						flex-basis: 100%; /* 對話編號獨佔第一列 */
+				}
+
+				.modelInfo {
+						flex: 0 1 auto;
+						width: fit-content;
+						max-width: 100%; /* 極長模型名稱仍可換行 */
+				}
+
+				.section-header {
+						flex-wrap: wrap;
+				}
 		}
+
 	</style>
 </head>
 <body>
