@@ -13,98 +13,60 @@
 	<style>
 		:root {
 			color-scheme: light dark;
-			--page: #f5f6f8;
-			--surface: #fff;
-			--surface-soft: #f7f8fb;
-			--surface-hover: #eef0f5;
-			--text: #202330;
-			--muted: #565e70;
-			--border: #dce0e8;
-			--accent: #5865f2;
-			--accent-soft: rgba(88, 101, 242, .12);
-			--code-head: #e9ebf1;
-			--code-text: #0d0d0d;
+			--page: #f5f6f8; --surface: #fff; --surface-soft: #f7f8fb;
+			--surface-hover: #eef0f5; --text: #202330; --muted: #565e70;
+			--border: #dce0e8; --accent: #5865f2; --accent-soft: rgba(88, 101, 242, .12);
+			--code-head: #e9ebf1; --code-text: #0d0d0d;
 			--shadow: 0 3px 16px rgba(30, 38, 56, .045);
 		}
 		* { box-sizing: border-box; }
 		body {
-			margin: 0;
-			background: var(--page);
-			color: var(--text);
-			font-family: 'Microsoft JhengHei', system-ui, sans-serif;
-			line-height: 1.6;
+			margin: 0; background: var(--page); color: var(--text);
+			font-family: 'Microsoft JhengHei', system-ui, sans-serif; line-height: 1.6;
 		}
 		.page-header {
-			width: 100%;
-			min-height: 72px;
+			width: 100%; min-height: 72px;
 			padding: 14px max(20px, calc((100vw - 960px) / 2));
-			display: flex;
-			align-items: center;
-			justify-content: space-between;
-			gap: 16px;
-			background: var(--surface);
-			border-bottom: 1px solid var(--border);
+			display: flex; align-items: center; justify-content: space-between; gap: 16px;
+			background: var(--surface); border-bottom: 1px solid var(--border);
 		}
 		.logo { color: var(--text); font-size: 21px; font-weight: 750; text-decoration: none; white-space: nowrap; }
 		.page-actions { display: flex; align-items: center; gap: 9px; }
 		button { font: inherit; }
 		button:disabled { opacity: .5; cursor: not-allowed !important; }
 		.action-button, .editButton, .edit-save, .edit-cancel {
-			border: 1px solid transparent;
-			border-radius: 8px;
-			cursor: pointer;
-			font-weight: 600;
+			border: 1px solid transparent; border-radius: 8px; cursor: pointer; font-weight: 600;
 		}
 		.action-button { min-height: 40px; padding: 7px 18px; color: #fff; }
 		#submitBtn { background: #248046; }
 		#newBtn { background: #b63137; }
 		#conversationContainer {
-			width: min(100% - 40px, 860px);
-			margin: 28px auto 64px;
-			min-width: 0;
+			width: min(100% - 40px, 860px); margin: 28px auto 64px; min-width: 0;
 		}
 		.conversation {
-			min-width: 0;
-			margin-bottom: 20px;
-			background: var(--surface);
-			border: 1px solid var(--border);
-			border-radius: 14px;
-			box-shadow: var(--shadow);
-			overflow: hidden;
+			min-width: 0; margin-bottom: 20px; background: var(--surface);
+			border: 1px solid var(--border); border-radius: 14px;
+			box-shadow: var(--shadow); overflow: hidden;
 		}
 		.conversation.editing { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 		.conversation-header {
-			display: flex;
-			align-items: center;
-			justify-content: space-between;
-			gap: 10px 16px;
-			min-width: 0;
-			padding: 14px 20px;
-			background: var(--surface-soft);
-			border-bottom: 1px solid var(--border);
+			display: flex; align-items: center; justify-content: space-between;
+			gap: 10px 16px; min-width: 0; padding: 14px 20px;
+			background: var(--surface-soft); border-bottom: 1px solid var(--border);
 		}
 		.conversation-identity { display: flex; align-items: center; gap: 12px; min-width: 0; font-weight: 700; }
 		.select-conversation { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; }
 		.checkbox { width: 18px; height: 18px; margin: 0; flex: none; accent-color: var(--accent); cursor: pointer; }
 		.id { overflow-wrap: anywhere; }
 		.modelInfo {
-			min-width: 0;
-			max-width: 55%;
-			padding: 3px 10px;
-			border: 1px solid var(--border);
-			border-radius: 999px;
-			color: var(--muted);
-			font-size: 13px;
-			font-weight: 500;
-			overflow-wrap: anywhere;
-			text-align: right;
+			min-width: 0; max-width: 55%; padding: 3px 10px;
+			border: 1px solid var(--border); border-radius: 999px;
+			color: var(--muted); font-size: 13px; font-weight: 500;
+			overflow-wrap: anywhere; text-align: right;
 		}
 		.conversation.editing .modelInfo { display: none; }
 		.message-section { min-width: 0; padding: 20px 24px; }
 		.message-section + .message-section { border-top: 1px solid var(--border); }
-		.role-system { background: var(--surface); }
-		.role-user { background: var(--surface); }
-		.role-assistant { background: var(--surface); }
 		.section-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
 		.role-label { color: var(--muted); font-size: 13px; font-weight: 750; letter-spacing: .04em; }
 		.message-body { min-width: 0; }
@@ -116,47 +78,25 @@
 		.message-content ul, .reasoning-box ul { padding-left: 22px; }
 		.message-content li, .reasoning-box li { margin: 4px 0; }
 		.message-content blockquote, .reasoning-box blockquote {
-			border-left: 3px solid var(--border);
-			margin: 12px 0;
-			padding: 6px 14px;
-			background: var(--surface-soft);
-			color: var(--muted);
+			border-left: 3px solid var(--border); margin: 12px 0; padding: 6px 14px;
+			background: var(--surface-soft); color: var(--muted);
 		}
-		.table-scroll {
-			max-width: 100%;
-			overflow-x: auto;
-			margin: 12px 0;
+		/* 讓任意 Markdown 表格有可閱讀的欄寬；長內容適度換行，超寬只捲動表格。 */
+		.table-scroll { max-width: 100%; overflow-x: auto; margin: 12px 0; }
+		.table-scroll table { width: max-content; min-width: 100%; border-collapse: collapse; font-size: .95em; }
+		.table-scroll th, .table-scroll td {
+			min-width: 120px; max-width: 260px; padding: 8px 12px;
+			border: 1px solid var(--border); text-align: left; vertical-align: top;
+			white-space: normal; word-break: normal; overflow-wrap: anywhere;
 		}
-
-		.table-scroll table {
-				width: max-content; /* 欄位需要多少寬度，就讓表格長多少 */
-				min-width: 100%;    /* 短表格仍填滿容器 */
-				border-collapse: collapse;
-				font-size: .95em;
-		}
-
-		.table-scroll th,
-		.table-scroll td {
-				min-width: 100px;
-				padding: 7px 10px;
-				border: 1px solid var(--border);
-				text-align: left;
-				white-space: nowrap;   /* 不要把檔名拆成一個字母一行 */
-				overflow-wrap: normal;
-				word-break: normal;
-		}
-
 		.table-scroll th { background: var(--surface-soft); }
 		.message-content pre, .reasoning-box pre, .tool-event pre {
-			max-width: 100%; overflow: auto; padding: 12px; background: var(--surface-soft); border-radius: 8px;
+			max-width: 100%; overflow: auto; padding: 12px;
+			background: var(--surface-soft); border-radius: 8px;
 		}
 		.editButton {
-			flex: none;
-			min-height: 36px;
-			padding: 5px 12px;
-			background: var(--surface-soft);
-			color: var(--text);
-			border-color: var(--border);
+			flex: none; min-height: 36px; padding: 5px 12px;
+			background: var(--surface-soft); color: var(--text); border-color: var(--border);
 		}
 		.editButton:hover:not(:disabled), .reasoning-toggle:hover { background: var(--surface-hover); }
 		.conversation.editing .editButton { opacity: .5; pointer-events: none; }
@@ -196,12 +136,12 @@
 			background: var(--surface-soft); font-size: .92em;
 		}
 		.reasoning-box.show { display: block; }
-		.timeline-message + .timeline-message, .timeline-message + .tool-event, .tool-event + .timeline-message, .tool-event + .tool-event { margin-top: 16px; }
+		.timeline-message + .timeline-message, .timeline-message + .tool-event,
+		.tool-event + .timeline-message, .tool-event + .tool-event { margin-top: 16px; }
 		.code-block { max-width: 100%; margin: 12px 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 		.code-header {
 			display: flex; align-items: center; justify-content: space-between; gap: 12px;
-			padding: 7px 12px; background: var(--code-head);
-			font-family: monospace; font-size: 13px;
+			padding: 7px 12px; background: var(--code-head); font-family: monospace; font-size: 13px;
 		}
 		.copy-code-btn { border: none; background: transparent; color: inherit; cursor: pointer; }
 		.copy-code-btn:hover { text-decoration: underline; }
@@ -213,7 +153,10 @@
 		.hljs-number { color: #ac4f23; }
 		.hljs-built_in, .hljs-title { color: #643cae; }
 		.hljs-comment { color: #586069; }
-		.tool-event { padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-soft); }
+		.tool-event {
+			padding: 10px 12px; border: 1px solid var(--border);
+			border-radius: 8px; background: var(--surface-soft);
+		}
 		.tool-event summary { cursor: pointer; font-weight: 650; overflow-wrap: anywhere; }
 		.tool-event[open] summary { margin-bottom: 10px; }
 		.tool-call { min-width: 0; margin-top: 10px; padding: 8px 0 8px 12px; border-left: 3px solid var(--accent); }
@@ -249,21 +192,11 @@
 			.edit-save, .edit-cancel { min-height: 44px; }
 		}
 		@media (max-width: 400px) {
-				.conversation-identity {
-						flex-basis: 100%; /* 對話編號獨佔第一列 */
-				}
-
-				.modelInfo {
-						flex: 0 1 auto;
-						width: fit-content;
-						max-width: 100%; /* 極長模型名稱仍可換行 */
-				}
-
-				.section-header {
-						flex-wrap: wrap;
-				}
+			/* 換到第二列的是模型的位置，不是把模型標籤拉滿整列。 */
+			.conversation-identity { flex-basis: 100%; }
+			.modelInfo { flex: 0 1 auto; width: fit-content; max-width: 100%; }
+			.section-header { flex-wrap: wrap; }
 		}
-
 	</style>
 </head>
 <body>
@@ -304,18 +237,20 @@ md.renderer.rules.fence = (tokens, index, options) => {
 		<pre><code class="hljs language-${safeLanguage}">${codeHtml}</code></pre>
 	</div>`;
 };
+// 只保留使用者原文中的單行換行；助理與思考內容仍使用原本的 Markdown 行為。
+const userMd = window.markdownit({ breaks: true, highlight: md.options.highlight });
+userMd.renderer.rules.fence = md.renderer.rules.fence;
 let editingState = null;
 fetch(`/api/chatlog/${chatid}`)
 .then(response => response.json())
 .then(data => {
-	// 缺少選填欄位不影響顯示；若 API 回傳不是陣列，也不讓頁面因迭代而崩潰。
 	const json = Array.isArray(data) ? data.filter(entry => entry && typeof entry === 'object') : [];
 	const conversationContainer = document.getElementById('conversationContainer');
 	let shouldScrollToBottom = false;
 	const textValue = value => typeof value === 'string' ? value : '';
 
-	function renderMarkdown(target, text) {
-		target.innerHTML = md.render(textValue(text));
+	function renderMarkdown(target, text, renderer = md) {
+		target.innerHTML = renderer.render(textValue(text));
 		// 表格比手機寬時只捲動表格，不撐寬整張卡片。
 		target.querySelectorAll('table').forEach(table => {
 			const wrapper = document.createElement('div');
@@ -491,7 +426,7 @@ fetch(`/api/chatlog/${chatid}`)
 		} else {
 			const content = document.createElement('div');
 			content.classList.add('message-content');
-			renderMarkdown(content, entry[field]);
+			renderMarkdown(content, entry[field], field === 'user' ? userMd : md);
 			body.appendChild(content);
 		}
 	}
