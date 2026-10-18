@@ -354,7 +354,7 @@ fetch('/api/log/chatlist')
 				try {
 					chatTop.innerHTML =
 						'<div class="chat-title">' +
-						'<span class="' + getChatIdClass(chat) + '">#' + id + '</span>'
+						'<span class="' + getChatIdClass(chat) + '">#' + id + '</span>' +
 						newTitle + '</div>' +
 						'<div class="chat-time">' +
 						(chat.updatedAt ? formatTime(chat.updatedAt) : '') +
@@ -370,7 +370,7 @@ fetch('/api/log/chatlist')
 
 					chatTop.innerHTML =
 						'<div class="chat-title">' +
-						'<span class="' + getChatIdClass(chat) + '">#' + id + '</span>'
+						'<span class="' + getChatIdClass(chat) + '">#' + id + '</span>' +
 						originalTitle + '</div>' +
 						'<div class="chat-time">' +
 						(chat.updatedAt ? formatTime(chat.updatedAt) : '') +
@@ -383,7 +383,7 @@ fetch('/api/log/chatlist')
 			renameBox.querySelector(".cancel").onclick = () => {
 				chatTop.innerHTML =
 					'<div class="chat-title">' +
-					'<span class="' + getChatIdClass(chat) + '">#' + id + '</span>'
+					'<span class="' + getChatIdClass(chat) + '">#' + id + '</span>' +
 					originalTitle + '</div>' +
 					'<div class="chat-time">' +
 					(chat.updatedAt ? formatTime(chat.updatedAt) : '') +

@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-Hant">
 <head>
 	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=0.9">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title>Chat Log | modbot</title>
 	<link rel="apple-touch-icon" sizes="120x120" href="/favicon/apple-touch-icon.png">
 	<link rel="icon" type="image/x-icon" href="/favicon/favicon.ico">
@@ -11,397 +11,237 @@
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/markdown-it/13.0.2/markdown-it.js" nonce="{{ nonce }}"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js" nonce="{{ nonce }}"></script>
 	<style>
+		:root {
+			color-scheme: light dark;
+			--page: #f5f6f8;
+			--surface: #fff;
+			--surface-soft: #f7f8fb;
+			--surface-hover: #eef0f5;
+			--text: #202330;
+			--muted: #565e70;
+			--border: #dce0e8;
+			--accent: #5865f2;
+			--accent-soft: rgba(88, 101, 242, .12);
+			--code-head: #e9ebf1;
+			--code-text: #0d0d0d;
+			--shadow: 0 3px 16px rgba(30, 38, 56, .045);
+		}
+		* { box-sizing: border-box; }
 		body {
-			display: flex;
-			justify-content: center;
-			align-items: flex-start;
-			height: 100vh;
 			margin: 0;
-			background-color: #f0f0f0;
-			color: black;
-			margin-top: 100px;
-			font-family: 'Microsoft JhengHei', sans-serif;
-			overflow-x: hidden;
-		}
-		#conversationContainer {
-			max-width: 800px;
-			width: 100%;
-			box-sizing: border-box;
-			overflow-x: hidden;
-		}
-		.conversation {
-			border: 1px solid #ccc;
-			margin-bottom: 18px;
-			padding: 10px;
-			border-radius: 6px;
-			position: relative;
-			background-color: #fff;
-		}
-		.conversation p {
-			margin: 8px 0;
+			background: var(--page);
+			color: var(--text);
+			font-family: 'Microsoft JhengHei', system-ui, sans-serif;
 			line-height: 1.6;
 		}
-		.conversation h1, .conversation h2, .conversation h3 {
-			margin: 12px 0 6px;
-		}
-		.conversation ul {
-			padding-left: 20px;
-		}
-		.conversation li {
-			margin: 4px 0;
-		}
-		.conversation blockquote {
-			border-left: 4px solid #ccc;
-			margin: 8px 0;
-			padding: 6px 12px;
-			background-color: #f9f9f9;
-			color: #555;
-		}
-		.conversation table {
+		.page-header {
 			width: 100%;
-			border-collapse: collapse;
-			margin: 10px 0;
-			font-size: 0.95em;
-		}
-		.conversation th, .conversation td {
-			border: 1px solid #ccc;
-			padding: 6px 10px;
-			text-align: left;
-		}
-		.conversation th {
-			background-color: #f5f5f5;
-			font-weight: bold;
-		}
-		.conversation pre {
-			overflow-x: auto;
-			padding: 10px;
-			background-color: #f5f5f5;
-			border-radius: 6px;
-			margin: 10px 0;
-		}
-		.conversation.editing {
-			border-color: #5865f2;
-			box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.2);
-		}
-		.conversation.editing .modelInfo {
-			display: none;
-		}
-		.conversation.editing .editButton {
-			opacity: 0.5;
-			pointer-events: none;
-		}
-		.role-label {
-			font-weight: bold;
-			margin-bottom: 4px;
-		}
-		.message-content {
-			line-height: 1.6;
-			word-break: break-word;
-			overflow-wrap: break-word;
-		}
-		button:disabled {
-			opacity: 0.5;
-			pointer-events: none;
-		}
-		.editButton {
-			cursor: pointer;
-			color: #fff;
-			border: none;
-			padding: 5px 10px;
-			border-radius: 5px;
-			position: absolute;
-			top: 8px;
-		}
-		.editAssistantButton {
-			background-color: #5865f2;
-			right: 0.5rem;
-		}
-		.editUserButton {
-			background-color: #4e5058;
-			right: 8rem;
-		}
-		.editSystemButton {
-			background-color: #248045;
-			right: 0.5rem;
-		}
-		.edit-container {
-			margin-top: 6px;
-		}
-		.edit-textarea {
-			width: 100%;
-			max-width: 100%;
-			min-height: 80px;
-			max-height: 50vh;
-			font-size: 16px;
-			padding: 8px;
-			border-radius: 6px;
-			border: 1px solid #ccc;
-			box-sizing: border-box;
-		}
-		.edit-textarea:focus {
-			outline: none;
-			border-color: #5865f2;
-		}
-		.edit-actions {
-			margin-top: 6px;
-			display: flex;
-			gap: 8px;
-		}
-		.edit-save {
-			background-color: #248046;
-			color: white;
-			border: none;
-			padding: 6px 12px;
-			border-radius: 5px;
-			cursor: pointer;
-		}
-		.edit-cancel {
-			background-color: #da373c;
-			color: white;
-			border: none;
-			padding: 6px 12px;
-			border-radius: 5px;
-			cursor: pointer;
-		}
-		.logo {
-			position: absolute;
-			top: 10px;
-			left: 10px;
-			font-weight: bold;
-			margin-top: 20px;
-			margin-left: 25px;
-			font-size: 22px;
-			text-decoration: none;
-			color: #000;
-		}
-		.id {
-			font-weight: bold;
-			font-size: 18px;
-			position: relative;
-			left: 30px;
-		}
-		.checkbox {
-			transform: scale(1.2);
-			position: absolute;
-			top: 13px;
-		}
-		.modelInfo {
-			position: absolute;
-			right: 14rem;
-			top: 6px;
-			background-color: #f0f0f0;
-			padding: 5px 10px;
-			border-radius: 5px;
-			font-size: 14px;
-		}
-		#submitBtn {
-			background-color: #248046;
-			color: #fff;
-			border: none;
-			padding: 10px 20px;
-			border-radius: 5px;
-			cursor: pointer;
-			position: absolute;
-			top: 10px;
-			right: 10px;
-			margin-top: 20px;
-			margin-right: 25px;
-		}
-		#newBtn {
-			background-color: #DA373C;
-			color: #fff;
-			border: none;
-			padding: 10px 20px;
-			border-radius: 5px;
-			cursor: pointer;
-			position: absolute;
-			top: 10px;
-			right: 90px;
-			margin-top: 20px;
-			margin-right: 25px;
-		}
-		.reasoning-toggle {
-			margin-top: 8px;
-			padding: 6px 10px;
-			border-radius: 5px;
-			border: none;
-			cursor: pointer;
-			color: #000;
-			background-color: #e0e0e0;
-		}
-		.reasoning-toggle:hover {
-			background-color: #d5d5d5;
-		}
-		.reasoning-box {
-			display: none;
-			margin-top: 8px;
-			margin-bottom: 8px;
-			padding: 10px;
-			background-color: #f5f5f5;
-			border-radius: 5px;
-			font-size: 0.9em;
-			max-height: 200px;
-			overflow-y: auto;
-		}
-		.reasoning-box.show {
-			display: block;
-		}
-		.conversation .code-block pre {
-			color: #0d0d0d;
-		}
-		.conversation .hljs-keyword {
-			color: #ab4f7a;
-		}
-		.conversation .hljs-string {
-			color: #3a843f;
-		}
-		.conversation .hljs-number {
-			color: #ac4f23;
-		}
-		.conversation .hljs-built_in,
-		.conversation .hljs-title {
-			color: #643cae;
-		}
-		.conversation .hljs-comment {
-			color: #586069;
-		}
-		.conversation .code-block {
-			margin: 10px 0;
-			border-radius: 6px;
-			overflow: hidden;
-		}
-		.conversation .code-header {
+			min-height: 72px;
+			padding: 14px max(20px, calc((100vw - 960px) / 2));
 			display: flex;
 			align-items: center;
 			justify-content: space-between;
-			padding: 6px 10px;
-			background-color: #e5e5e5;
-			font-family: monospace;
-			font-size: 13px;
+			gap: 16px;
+			background: var(--surface);
+			border-bottom: 1px solid var(--border);
 		}
-		.conversation .copy-code-btn {
-			border: none;
-			background: transparent;
-			color: inherit;
+		.logo { color: var(--text); font-size: 21px; font-weight: 750; text-decoration: none; white-space: nowrap; }
+		.page-actions { display: flex; align-items: center; gap: 9px; }
+		button { font: inherit; }
+		button:disabled { opacity: .5; cursor: not-allowed !important; }
+		.action-button, .editButton, .edit-save, .edit-cancel {
+			border: 1px solid transparent;
+			border-radius: 8px;
 			cursor: pointer;
+			font-weight: 600;
 		}
-		.conversation .copy-code-btn:hover {
-			text-decoration: underline;
+		.action-button { min-height: 40px; padding: 7px 18px; color: #fff; }
+		#submitBtn { background: #248046; }
+		#newBtn { background: #b63137; }
+		#conversationContainer {
+			width: min(100% - 40px, 860px);
+			margin: 28px auto 64px;
+			min-width: 0;
 		}
-		.conversation .code-block pre {
-			margin: 0;
-			border-radius: 0;
+		.conversation {
+			min-width: 0;
+			margin-bottom: 20px;
+			background: var(--surface);
+			border: 1px solid var(--border);
+			border-radius: 14px;
+			box-shadow: var(--shadow);
+			overflow: hidden;
 		}
+		.conversation.editing { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+		.conversation-header {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 10px 16px;
+			min-width: 0;
+			padding: 14px 20px;
+			background: var(--surface-soft);
+			border-bottom: 1px solid var(--border);
+		}
+		.conversation-identity { display: flex; align-items: center; gap: 12px; min-width: 0; font-weight: 700; }
+		.select-conversation { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; }
+		.checkbox { width: 18px; height: 18px; margin: 0; flex: none; accent-color: var(--accent); cursor: pointer; }
+		.id { overflow-wrap: anywhere; }
+		.modelInfo {
+			min-width: 0;
+			max-width: 55%;
+			padding: 3px 10px;
+			border: 1px solid var(--border);
+			border-radius: 999px;
+			color: var(--muted);
+			font-size: 13px;
+			font-weight: 500;
+			overflow-wrap: anywhere;
+			text-align: right;
+		}
+		.conversation.editing .modelInfo { display: none; }
+		.message-section { min-width: 0; padding: 20px 24px; }
+		.message-section + .message-section { border-top: 1px solid var(--border); }
+		.role-system { background: var(--surface); }
+		.role-user { background: var(--surface); }
+		.role-assistant { background: var(--surface); }
+		.section-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+		.role-label { color: var(--muted); font-size: 13px; font-weight: 750; letter-spacing: .04em; }
+		.message-body { min-width: 0; }
+		.message-content { min-width: 0; line-height: 1.7; overflow-wrap: anywhere; }
+		.message-content > :first-child, .reasoning-box > :first-child { margin-top: 0; }
+		.message-content > :last-child, .reasoning-box > :last-child { margin-bottom: 0; }
+		.message-content p, .reasoning-box p { margin: 8px 0; }
+		.message-content h1, .message-content h2, .message-content h3 { margin: 16px 0 8px; line-height: 1.35; }
+		.message-content ul, .reasoning-box ul { padding-left: 22px; }
+		.message-content li, .reasoning-box li { margin: 4px 0; }
+		.message-content blockquote, .reasoning-box blockquote {
+			border-left: 3px solid var(--border);
+			margin: 12px 0;
+			padding: 6px 14px;
+			background: var(--surface-soft);
+			color: var(--muted);
+		}
+		.table-scroll { max-width: 100%; overflow-x: auto; margin: 12px 0; }
+		.table-scroll table { width: 100%; border-collapse: collapse; font-size: .95em; }
+		.table-scroll th, .table-scroll td { border: 1px solid var(--border); padding: 7px 10px; text-align: left; }
+		.table-scroll th { background: var(--surface-soft); }
+		.message-content pre, .reasoning-box pre, .tool-event pre {
+			max-width: 100%; overflow: auto; padding: 12px; background: var(--surface-soft); border-radius: 8px;
+		}
+		.editButton {
+			flex: none;
+			min-height: 36px;
+			padding: 5px 12px;
+			background: var(--surface-soft);
+			color: var(--text);
+			border-color: var(--border);
+		}
+		.editButton:hover:not(:disabled), .reasoning-toggle:hover { background: var(--surface-hover); }
+		.conversation.editing .editButton { opacity: .5; pointer-events: none; }
+		.edit-container { min-width: 0; }
+		.edit-textarea {
+			width: 100%; min-height: 90px; max-height: 50vh;
+			padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;
+			background: var(--surface); color: var(--text); font: inherit; font-size: 16px;
+			resize: vertical;
+		}
+		.edit-textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+		.edit-actions { display: flex; gap: 8px; margin-top: 10px; }
+		.edit-save, .edit-cancel { min-height: 40px; padding: 7px 16px; color: white; }
+		.edit-save { background: #248046; }
+		.edit-cancel { background: #b63137; }
+		.user-image { display: block; max-width: 100%; height: auto; margin-top: 14px; border-radius: 8px; }
+		.file-attachment {
+			display: flex; align-items: center; gap: 12px;
+			width: fit-content; max-width: 100%; min-width: 0;
+			margin-top: 14px; padding: 11px 14px;
+			border: 1px solid var(--border); border-radius: 10px;
+			background: var(--surface-soft);
+		}
+		.file-icon { flex: none; font-size: 23px; line-height: 1; }
+		.file-details { min-width: 0; }
+		.file-name { font-weight: 650; overflow-wrap: anywhere; }
+		.file-type { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+		.reasoning-toggle {
+			margin: 0 0 10px; padding: 8px 12px;
+			border: 1px solid var(--border); border-radius: 8px;
+			background: var(--surface-soft); color: var(--text); cursor: pointer;
+		}
+		.reasoning-box {
+			display: none; max-height: 240px; overflow-y: auto;
+			margin: 0 0 14px; padding: 14px;
+			border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0;
+			background: var(--surface-soft); font-size: .92em;
+		}
+		.reasoning-box.show { display: block; }
+		.timeline-message + .timeline-message, .timeline-message + .tool-event, .tool-event + .timeline-message, .tool-event + .tool-event { margin-top: 16px; }
+		.code-block { max-width: 100%; margin: 12px 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+		.code-header {
+			display: flex; align-items: center; justify-content: space-between; gap: 12px;
+			padding: 7px 12px; background: var(--code-head);
+			font-family: monospace; font-size: 13px;
+		}
+		.copy-code-btn { border: none; background: transparent; color: inherit; cursor: pointer; }
+		.copy-code-btn:hover { text-decoration: underline; }
+		.message-content .code-block pre, .reasoning-box .code-block pre {
+			margin: 0; border-radius: 0; color: var(--code-text); overflow-x: auto;
+		}
+		.hljs-keyword { color: #ab4f7a; }
+		.hljs-string { color: #3a843f; }
+		.hljs-number { color: #ac4f23; }
+		.hljs-built_in, .hljs-title { color: #643cae; }
+		.hljs-comment { color: #586069; }
+		.tool-event { padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-soft); }
+		.tool-event summary { cursor: pointer; font-weight: 650; overflow-wrap: anywhere; }
+		.tool-event[open] summary { margin-bottom: 10px; }
+		.tool-call { min-width: 0; margin-top: 10px; padding: 8px 0 8px 12px; border-left: 3px solid var(--accent); }
+		.tool-name { font-weight: 650; font-family: monospace; overflow-wrap: anywhere; }
+		.tool-label { margin: 8px 0 4px; color: var(--muted); font-size: 13px; }
+		.tool-event pre { max-height: 240px; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
+		:where(button, a, input, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 		@media (prefers-color-scheme: dark) {
-			body {
-				background-color: #1f1f1f;
-				color: white;
+			:root {
+				--page: #171a20; --surface: #23272f; --surface-soft: #2a303a;
+				--surface-hover: #343d49; --text: #f1f3f7; --muted: #b9c1cf;
+				--border: #414956; --accent: #9ba5ff; --accent-soft: rgba(155, 165, 255, .22);
+				--code-head: #343c47; --code-text: #f1f3f7;
+				--shadow: 0 3px 16px rgba(0, 0, 0, .12);
 			}
-			.conversation {
-				background-color: #000;
-			}
-			.conversation blockquote {
-				border-left: 4px solid #555;
-				background-color: #1a1a1a;
-				color: #ccc;
-			}
-			.conversation th, .conversation td {
-				border: 1px solid #555;
-			}
-			.conversation th {
-				background-color: #1a1a1a;
-			}
-			.conversation pre {
-				background-color: #1a1a1a;
-			}
-			.logo {
-				color: white;
-			}
-			.modelInfo {
-				background-color: #1f1f1f;
-			}
-			.edit-textarea {
-				background-color: #2a2a2a;
-				color: white;
-			}
-			.reasoning-toggle {
-				background-color: #2a2a2a;
-				color: white;
-			}
-			.reasoning-toggle:hover {
-				background-color: #3a3a3a;
-			}
-			.reasoning-box {
-				background-color: #1a1a1a;
-			}
-			.conversation .hljs-keyword {
-				color: #ff7b72;
-			}
-			.conversation .hljs-string {
-				color: #a5d6ff;
-			}
-			.conversation .hljs-number,
-			.conversation .hljs-built_in {
-				color: #79c0ff;
-			}
-			.conversation .hljs-comment {
-				color: #8b949e;
-			}
-			.conversation .hljs-title {
-				color: #d2a8ff;
-			}
+			.hljs-keyword { color: #ff7b72; }
+			.hljs-string { color: #a5d6ff; }
+			.hljs-number, .hljs-built_in { color: #79c0ff; }
+			.hljs-comment { color: #9aa6b4; }
+			.hljs-title { color: #d2a8ff; }
 		}
-		@media (max-width: 768px) {
-			.modelInfo {
-				right: 12rem;
-				max-width: 25%;
-				font-size: 12px;
-			}
-			.editUserButton {
-				right: 7rem;
-			}
+		@media (max-width: 600px) {
+			.page-header { padding: 12px 16px; flex-wrap: wrap; min-height: 0; }
+			.page-actions { width: 100%; justify-content: flex-end; }
+			.action-button { min-height: 44px; }
+			#conversationContainer { width: calc(100% - 24px); margin: 16px auto 40px; }
+			.conversation { margin-bottom: 14px; border-radius: 12px; }
+			.conversation-header { padding: 12px 16px; flex-wrap: wrap; }
+			.modelInfo { max-width: 100%; text-align: left; }
+			.message-section { padding: 16px; }
+			.editButton { min-height: 44px; }
+			.file-attachment { width: 100%; }
+			.edit-save, .edit-cancel { min-height: 44px; }
 		}
-		/* 只新增工具紀錄專用樣式；原本按鈕與頁面配置不變。 */
-		.tool-event {
-			margin: 10px 0;
-			padding: 8px;
-			border: 1px solid #ccc;
-			border-radius: 5px;
-		}
-		.tool-event summary {
-			cursor: pointer;
-			font-weight: bold;
-			overflow-wrap: anywhere;
-		}
-		.tool-event pre {
-			white-space: pre-wrap;
-			overflow-wrap: anywhere;
-			max-height: 240px;
-			overflow: auto;
-			font-size: 13px;
-		}
-		.tool-call {
-			margin-top: 10px;
-			padding: 8px;
-			border-left: 3px solid #5865f2;
-		}
-		.tool-name {
-			font-weight: bold;
-			font-family: monospace;
-			overflow-wrap: anywhere;
-		}
-		.tool-label {
-			margin: 8px 0 4px;
-			font-size: 13px;
+		@media (max-width: 400px) {
+			.modelInfo { flex-basis: 100%; }
+			.section-header { flex-wrap: wrap; }
 		}
 	</style>
 </head>
 <body>
-
-<a class="logo" href="/">modbot.dev</a>
-<div id="conversationContainer"></div>
-<button id="submitBtn">送出</button>
-<button id="newBtn">複製</button>
+<header class="page-header">
+	<a class="logo" href="/">modbot.dev</a>
+	<div class="page-actions">
+		<button id="newBtn" class="action-button" type="button">複製</button>
+		<button id="submitBtn" class="action-button" type="button">送出</button>
+	</div>
+</header>
+<main id="conversationContainer" aria-label="對話紀錄"></main>
 
 <script nonce="{{ nonce }}">
 const chatid = window.location.pathname.split('/').pop();
@@ -411,10 +251,7 @@ const md = window.markdownit({
 			return ''; // 沒標語言或套件沒載入時，交回 markdown-it 安全地顯示原文
 		}
 		try {
-			return window.hljs.highlight(code, {
-				language,
-				ignoreIllegals: true
-			}).value;
+			return window.hljs.highlight(code, { language, ignoreIllegals: true }).value;
 		} catch {
 			return '';
 		}
@@ -426,7 +263,6 @@ md.renderer.rules.fence = (tokens, index, options) => {
 	const safeLanguage = md.utils.escapeHtml(language);
 	const highlighted = options.highlight(token.content, language);
 	const codeHtml = highlighted || md.utils.escapeHtml(token.content);
-
 	return `<div class="code-block">
 		<div class="code-header">
 			<span>${safeLanguage}</span>
@@ -439,18 +275,28 @@ let editingState = null;
 fetch(`/api/chatlog/${chatid}`)
 .then(response => response.json())
 .then(data => {
-	const json = data;
+	// 缺少選填欄位不影響顯示；若 API 回傳不是陣列，也不讓頁面因迭代而崩潰。
+	const json = Array.isArray(data) ? data.filter(entry => entry && typeof entry === 'object') : [];
 	const conversationContainer = document.getElementById('conversationContainer');
 	let shouldScrollToBottom = false;
+	const textValue = value => typeof value === 'string' ? value : '';
+
+	function renderMarkdown(target, text) {
+		target.innerHTML = md.render(textValue(text));
+		// 表格比手機寬時只捲動表格，不撐寬整張卡片。
+		target.querySelectorAll('table').forEach(table => {
+			const wrapper = document.createElement('div');
+			wrapper.classList.add('table-scroll');
+			table.replaceWith(wrapper);
+			wrapper.appendChild(table);
+		});
+	}
 
 	function readable(value) {
 		if (value === '(deleted)') return '（內容已刪除）';
 		if (typeof value !== 'string') return JSON.stringify(value ?? null, null, 2);
-		try {
-			return JSON.stringify(JSON.parse(value), null, 2);
-		} catch {
-			return value;
-		}
+		try { return JSON.stringify(JSON.parse(value), null, 2); }
+		catch { return value; }
 	}
 
 	function toolArguments(call) {
@@ -459,9 +305,7 @@ fetch(`/api/chatlog/${chatid}`)
 			const args = JSON.parse(call.arguments);
 			if (args && typeof args === 'object' && 'content' in args) args.content = '（檔案內容已隱藏）';
 			return JSON.stringify(args, null, 2);
-		} catch {
-			return '（參數格式無法解析，已隱藏）';
-		}
+		} catch { return '（參數格式無法解析，已隱藏）'; }
 	}
 
 	function toolOutput(name, output) {
@@ -471,9 +315,7 @@ fetch(`/api/chatlog/${chatid}`)
 			const result = typeof output === 'string' ? JSON.parse(output) : output;
 			if (!result || typeof result !== 'object' || Array.isArray(result)) return '（結果格式無法解析，已隱藏）';
 			return JSON.stringify({ ...result, ...('content' in result ? { content: '（檔案內容已隱藏）' } : {}) }, null, 2);
-		} catch {
-			return '（結果格式無法解析，已隱藏）';
-		}
+		} catch { return '（結果格式無法解析，已隱藏）'; }
 	}
 
 	function toolGroup(calls, outputs) {
@@ -499,7 +341,7 @@ fetch(`/api/chatlog/${chatid}`)
 				heading.classList.add('tool-label');
 				heading.textContent = label;
 				const pre = document.createElement('pre');
-				pre.textContent = text; // 不把工具資料當 HTML 執行
+				pre.textContent = text ?? '';
 				block.append(heading, pre);
 			}
 			details.appendChild(block);
@@ -509,13 +351,8 @@ fetch(`/api/chatlog/${chatid}`)
 
 	function messageBlock(text) {
 		const block = document.createElement('div');
-		const title = document.createElement('div');
-		title.classList.add('role-label');
-		title.textContent = '[Assistant]';
-		const content = document.createElement('div');
-		content.classList.add('message-content');
-		content.innerHTML = md.render(text);
-		block.append(title, content);
+		block.classList.add('message-content', 'timeline-message');
+		renderMarkdown(block, text);
 		return block;
 	}
 
@@ -525,14 +362,13 @@ fetch(`/api/chatlog/${chatid}`)
 			.map(part => part.text).join('');
 	}
 
-	function renderAssistantTimeline(entry, index, container) {
+	function hasToolCalls(entry) {
+		return Array.isArray(entry.response_items) &&
+			entry.response_items.some(item => item && item.type === 'function_call');
+	}
+
+	function renderAssistantTimeline(entry, container) {
 		const items = Array.isArray(entry.response_items) ? entry.response_items : [];
-		const hasCalls = items.some(item => item && item.type === 'function_call');
-		if (!hasCalls) {
-			container.appendChild(renderEditableBlock(entry, index, 'assistant', 'Assistant'));
-			return;
-		}
-		// 有工具呼叫時，助理文字來自 response_items；編輯功能會被停用。
 		const outputs = new Map(items.filter(item => item && item.type === 'function_call_output' && item.call_id != null)
 			.map(item => [item.call_id, item.output]));
 		let pendingCalls = [];
@@ -556,7 +392,7 @@ fetch(`/api/chatlog/${chatid}`)
 			}
 		}
 		flushCalls();
-		const full = typeof entry.assistant === 'string' ? entry.assistant : '';
+		const full = textValue(entry.assistant);
 		// assistant 是整段文字。只補上 response_items 未記錄的部分，不重複顯示。
 		if (!recordedText) container.appendChild(messageBlock(full));
 		else if (full.startsWith(recordedText) && full.length > recordedText.length) {
@@ -564,110 +400,170 @@ fetch(`/api/chatlog/${chatid}`)
 		}
 	}
 
-	function createConversation(entry, index) {
-		const conversationDiv = document.createElement('div');
-		conversationDiv.classList.add('conversation');
-		if (editingState && editingState.index === index) conversationDiv.classList.add('editing');
-		if (entry.id === 0) {
-			conversationDiv.appendChild(renderEditableBlock(entry, index, 'system', 'System'));
-			const editSystemButton = document.createElement('button');
-			editSystemButton.textContent = 'Edit System Message';
-			editSystemButton.classList.add('editButton', 'editSystemButton');
-			editSystemButton.addEventListener('click', () => startEdit(entry, index, 'system'));
-			conversationDiv.appendChild(editSystemButton);
-		} else {
-			const idDiv = document.createElement('div');
-			idDiv.textContent = entry.id.toString();
-			idDiv.classList.add('id');
-			conversationDiv.appendChild(idDiv);
-			const checkbox = document.createElement('input');
-			checkbox.type = 'checkbox';
-			checkbox.checked = true;
-			checkbox.classList.add('checkbox');
-			conversationDiv.appendChild(checkbox);
-			conversationDiv.appendChild(renderEditableBlock(entry, index, 'user', 'User'));
-			if (entry.image_url) {
-				const imageDiv = document.createElement('div');
-				const image = document.createElement('img');
-				image.src = '/api/chat-images/' + entry.image_url;
-				image.alt = 'User provided image';
-				image.style.maxWidth = '100%';
-				imageDiv.appendChild(image);
-				conversationDiv.appendChild(imageDiv);
-			}
-			if (entry.reasoning) {
-				const toggleBtn = document.createElement('button');
-				toggleBtn.textContent = '查看思考';
-				toggleBtn.classList.add('reasoning-toggle');
-				const reasoningDiv = document.createElement('div');
-				reasoningDiv.classList.add('reasoning-box');
-				reasoningDiv.innerHTML = md.render(entry.reasoning);
-				toggleBtn.addEventListener('click', () => {
-					reasoningDiv.classList.toggle('show');
-					toggleBtn.textContent = reasoningDiv.classList.contains('show') ? '隱藏思考' : '查看思考';
-				});
-				conversationDiv.append(toggleBtn, reasoningDiv);
-			}
-			renderAssistantTimeline(entry, index, conversationDiv);
-			if (entry.model) {
-				const modelDiv = document.createElement('div');
-				modelDiv.textContent = entry.model;
-				modelDiv.classList.add('modelInfo');
-				conversationDiv.appendChild(modelDiv);
-			}
-			const editUserButton = document.createElement('button');
-			editUserButton.textContent = 'Edit User';
-			editUserButton.classList.add('editButton', 'editUserButton');
-			editUserButton.addEventListener('click', () => startEdit(entry, index, 'user'));
-			conversationDiv.appendChild(editUserButton);
-			const editAssistantButton = document.createElement('button');
-			editAssistantButton.textContent = 'Edit Assistant';
-			editAssistantButton.classList.add('editButton', 'editAssistantButton');
-			// 防止修改 assistant 後與分段的 response_items 不一致。
-			editAssistantButton.disabled = Array.isArray(entry.response_items) &&
-				entry.response_items.some(item => item && item.type === 'function_call');
-			if (editAssistantButton.disabled) editAssistantButton.title = '此對話有工具呼叫，無法編輯助理訊息';
-			editAssistantButton.addEventListener('click', () => startEdit(entry, index, 'assistant'));
-			conversationDiv.appendChild(editAssistantButton);
+	function makeEditButton(entry, index, field) {
+		const button = document.createElement('button');
+		button.type = 'button';
+		button.textContent = '編輯';
+		button.classList.add('editButton');
+		button.setAttribute('aria-label', `編輯${field === 'system' ? '系統訊息' : field === 'user' ? '使用者訊息' : '助理訊息'}`);
+		if (field === 'assistant' && hasToolCalls(entry)) {
+			button.disabled = true;
+			button.title = '此對話有工具呼叫，無法編輯助理訊息';
 		}
-		conversationContainer.appendChild(conversationDiv);
+		button.addEventListener('click', () => startEdit(entry, index, field));
+		return button;
 	}
 
-	function startEdit(entry, index, field) {
-		if (field === 'assistant' && index === json.length - 1) shouldScrollToBottom = true;
-		editingState = { index, field, value: cleanText(entry[field]) };
-		updateConversation();
+	function createMessageSection(entry, index, field, label) {
+		const section = document.createElement('section');
+		section.classList.add('message-section', `role-${field}`);
+		const header = document.createElement('div');
+		header.classList.add('section-header');
+		const role = document.createElement('div');
+		role.classList.add('role-label');
+		role.textContent = label;
+		header.append(role, makeEditButton(entry, index, field));
+		const body = document.createElement('div');
+		body.classList.add('message-body');
+		section.append(header, body);
+		return { section, body };
 	}
 
-	function renderEditableBlock(entry, index, field, label) {
-		const container = document.createElement('div');
+	function renderEditableContent(entry, index, field, body) {
 		if (editingState && editingState.index === index && editingState.field === field) {
-			container.classList.add('edit-container');
-			const labelDiv = document.createElement('div');
-			labelDiv.classList.add('role-label');
-			labelDiv.textContent = `[${label}]`;
+			const editContainer = document.createElement('div');
+			editContainer.classList.add('edit-container');
 			const textarea = document.createElement('textarea');
 			textarea.classList.add('edit-textarea');
+			textarea.setAttribute('aria-label', `編輯${field === 'system' ? '系統訊息' : field === 'user' ? '使用者訊息' : '助理訊息'}`);
 			textarea.value = editingState.value;
 			autoResizeTextarea(textarea);
 			textarea.addEventListener('input', () => autoResizeTextarea(textarea));
 			const actions = document.createElement('div');
 			actions.classList.add('edit-actions');
 			const saveBtn = document.createElement('button');
+			saveBtn.type = 'button';
 			saveBtn.textContent = '儲存';
 			saveBtn.classList.add('edit-save');
 			const cancelBtn = document.createElement('button');
+			cancelBtn.type = 'button';
 			cancelBtn.textContent = '取消';
 			cancelBtn.classList.add('edit-cancel');
 			saveBtn.addEventListener('click', () => { entry[field] = textarea.value; editingState = null; updateConversation(); });
 			cancelBtn.addEventListener('click', () => { editingState = null; updateConversation(); });
 			actions.append(saveBtn, cancelBtn);
-			container.append(labelDiv, textarea, actions);
+			editContainer.append(textarea, actions);
+			body.appendChild(editContainer);
 			setTimeout(() => autoResizeTextarea(textarea), 0);
 		} else {
-			container.innerHTML = `<div class="role-label">[${label}]</div><div class="message-content">${md.render(entry[field] || '')}</div>`;
+			const content = document.createElement('div');
+			content.classList.add('message-content');
+			renderMarkdown(content, entry[field]);
+			body.appendChild(content);
 		}
-		return container;
+	}
+
+	function renderFile(file) {
+		if (!file || typeof file !== 'object' || Array.isArray(file)) return null;
+		const attachment = document.createElement('div');
+		attachment.classList.add('file-attachment');
+		// 尚未定義下載 API：只展示中繼資料，不產生無效的連結。
+		const icon = document.createElement('span');
+		icon.classList.add('file-icon');
+		icon.setAttribute('aria-hidden', 'true');
+		icon.textContent = '📄';
+		const details = document.createElement('div');
+		details.classList.add('file-details');
+		const name = document.createElement('div');
+		name.classList.add('file-name');
+		name.textContent = typeof file.filename === 'string' && file.filename ? file.filename : '未命名檔案';
+		const type = document.createElement('div');
+		type.classList.add('file-type');
+		type.textContent = typeof file.content_type === 'string' && file.content_type ? file.content_type : '檔案附件';
+		details.append(name, type);
+		attachment.append(icon, details);
+		return attachment;
+	}
+
+	function renderReasoning(reasoning, body) {
+		if (!textValue(reasoning)) return;
+		const toggleBtn = document.createElement('button');
+		toggleBtn.type = 'button';
+		toggleBtn.textContent = '查看思考';
+		toggleBtn.classList.add('reasoning-toggle');
+		const reasoningDiv = document.createElement('div');
+		reasoningDiv.classList.add('reasoning-box');
+		renderMarkdown(reasoningDiv, reasoning);
+		toggleBtn.setAttribute('aria-expanded', 'false');
+		toggleBtn.addEventListener('click', () => {
+			const isOpen = reasoningDiv.classList.toggle('show');
+			toggleBtn.textContent = isOpen ? '隱藏思考' : '查看思考';
+			toggleBtn.setAttribute('aria-expanded', String(isOpen));
+		});
+		body.append(toggleBtn, reasoningDiv);
+	}
+
+	function createConversation(entry, index) {
+		const conversationDiv = document.createElement('article');
+		conversationDiv.classList.add('conversation');
+		if (editingState && editingState.index === index) conversationDiv.classList.add('editing');
+		const header = document.createElement('div');
+		header.classList.add('conversation-header');
+		if (entry.id === 0) {
+			const title = document.createElement('span');
+			title.classList.add('conversation-identity');
+			title.textContent = '系統訊息';
+			header.appendChild(title);
+			conversationDiv.appendChild(header);
+			const system = createMessageSection(entry, index, 'system', 'SYSTEM');
+			renderEditableContent(entry, index, 'system', system.body);
+			conversationDiv.appendChild(system.section);
+		} else {
+			const identity = document.createElement('label');
+			identity.classList.add('conversation-identity', 'select-conversation');
+			const checkbox = document.createElement('input');
+			checkbox.type = 'checkbox';
+			checkbox.checked = true;
+			checkbox.classList.add('checkbox');
+			checkbox.setAttribute('aria-label', `選取對話 ${entry.id ?? index + 1}`);
+			const id = document.createElement('span');
+			id.classList.add('id');
+			id.textContent = `對話 #${entry.id ?? index + 1}`;
+			identity.append(checkbox, id);
+			header.appendChild(identity);
+			if (typeof entry.model === 'string' && entry.model) {
+				const model = document.createElement('span');
+				model.classList.add('modelInfo');
+				model.textContent = entry.model;
+				header.appendChild(model);
+			}
+			conversationDiv.appendChild(header);
+			const user = createMessageSection(entry, index, 'user', '使用者');
+			renderEditableContent(entry, index, 'user', user.body);
+			if (typeof entry.image_url === 'string' && entry.image_url) {
+				const image = document.createElement('img');
+				image.src = '/api/chat-images/' + entry.image_url;
+				image.alt = '使用者提供的圖片';
+				image.classList.add('user-image');
+				user.body.appendChild(image);
+			}
+			const file = renderFile(entry.file);
+			if (file) user.body.appendChild(file);
+			conversationDiv.appendChild(user.section);
+			const assistant = createMessageSection(entry, index, 'assistant', '助理');
+			renderReasoning(entry.reasoning, assistant.body);
+			if (hasToolCalls(entry)) renderAssistantTimeline(entry, assistant.body);
+			else renderEditableContent(entry, index, 'assistant', assistant.body);
+			conversationDiv.appendChild(assistant.section);
+		}
+		conversationContainer.appendChild(conversationDiv);
+	}
+
+	function startEdit(entry, index, field) {
+		if (field === 'assistant' && hasToolCalls(entry)) return;
+		if (field === 'assistant' && index === json.length - 1) shouldScrollToBottom = true;
+		editingState = { index, field, value: cleanText(entry[field]) };
+		updateConversation();
 	}
 
 	function autoResizeTextarea(textarea) {
@@ -676,35 +572,40 @@ fetch(`/api/chatlog/${chatid}`)
 	}
 
 	function scrollToLastConversation() {
-		const conversations = document.querySelectorAll('.conversation');
+		const conversations = conversationContainer.querySelectorAll('.conversation');
 		if (conversations.length) conversations[conversations.length - 1].scrollIntoView({ behavior: 'auto', block: 'start' });
 	}
 
 	function cleanText(text) {
-		return text ? text.replace(/^\n+/, '') : '';
+		return textValue(text).replace(/^\n+/, '');
 	}
 
 	function updateConversation() {
-		const checkboxStates = Array.from(document.querySelectorAll('.checkbox')).map(checkbox => checkbox.checked);
-		conversationContainer.innerHTML = '';
+		const checkboxStates = Array.from(conversationContainer.querySelectorAll('.checkbox')).map(checkbox => checkbox.checked);
+		conversationContainer.replaceChildren();
 		json.forEach((entry, i) => createConversation(entry, i));
 		if (shouldScrollToBottom) {
 			requestAnimationFrame(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'auto' }));
 			shouldScrollToBottom = false;
 		}
-		document.querySelectorAll('.checkbox').forEach((checkbox, i) => { checkbox.checked = checkboxStates[i] ?? true; });
+		conversationContainer.querySelectorAll('.checkbox').forEach((checkbox, i) => { checkbox.checked = checkboxStates[i] ?? true; });
 	}
 
 	function getSelectedMessages() {
 		const selectedMessages = [];
-		const conversationDivs = document.querySelectorAll('.conversation');
+		const conversationDivs = conversationContainer.querySelectorAll('.conversation');
 		json.forEach((entry, i) => {
 			if (entry.id === 0) selectedMessages.push({ id: entry.id, system: entry.system });
-			else if (conversationDivs[i].querySelector('.checkbox')?.checked) selectedMessages.push({
-				id: entry.id, user: entry.user, assistant: cleanText(entry.assistant),
-				reasoning: entry.reasoning || null, model: entry.model || null,
-				image_url: entry.image_url || null, response_items: entry.response_items
-			});
+			else if (conversationDivs[i]?.querySelector('.checkbox')?.checked) {
+				const message = {
+					id: entry.id, user: entry.user, assistant: cleanText(entry.assistant),
+					reasoning: entry.reasoning || null, model: entry.model || null,
+					image_url: entry.image_url || null, response_items: entry.response_items
+				};
+				// 舊紀錄不必有 file；有附件的紀錄在送出與複製時則不能掉資料。
+				if (entry.file != null) message.file = entry.file;
+				selectedMessages.push(message);
+			}
 		});
 		return selectedMessages;
 	}
@@ -744,7 +645,8 @@ fetch(`/api/chatlog/${chatid}`)
 		return messages.map(entry => entry.system !== undefined ? { ...entry, id: 0 } : { ...entry, id: ++newIndex });
 	}
 
-	json.forEach((entry, index) => { createConversation(entry, index); scrollToLastConversation(); });
+	json.forEach((entry, index) => createConversation(entry, index));
+	scrollToLastConversation();
 	const submitButton = document.getElementById('submitBtn');
 	const newButton = document.getElementById('newBtn');
 	submitButton.addEventListener('click', async () => {
@@ -764,10 +666,8 @@ fetch(`/api/chatlog/${chatid}`)
 	conversationContainer.addEventListener('click', async event => {
 		const button = event.target.closest('.copy-code-btn');
 		if (!button) return;
-
 		const code = button.closest('.code-block')?.querySelector('code');
 		if (!code) return;
-
 		try {
 			await navigator.clipboard.writeText(code.textContent);
 			button.textContent = '已複製！';
@@ -777,8 +677,7 @@ fetch(`/api/chatlog/${chatid}`)
 			setTimeout(() => { button.textContent = '複製'; }, 1500);
 		}
 	});
-}).catch(error => alert(`Error fetching chat log. (${error.status})`));
+}).catch(error => alert(`Error fetching chat log. (${error.status ?? error})`));
 </script>
-
 </body>
 </html>
