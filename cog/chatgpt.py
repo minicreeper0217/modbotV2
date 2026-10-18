@@ -410,7 +410,7 @@ class ChatGPT(commands.Cog):
 			"success": True,
 			"filename": safe_name,
 			"url": f"https://{config.domain}/api/chat-files/{file_id}?{query}",
-			"expires_at": expires_at
+			"expires_at": datetime.fromtimestamp(expires_at, tz=tz).isoformat(timespec='seconds')
 		}
 
 	def cleanup_expired_files(self):
