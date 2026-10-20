@@ -185,16 +185,19 @@
 			#conversationContainer { width: calc(100% - 24px); margin: 16px auto 40px; }
 			.conversation { margin-bottom: 14px; border-radius: 12px; }
 			.conversation-header { padding: 12px 16px; flex-wrap: wrap; }
-			.modelInfo { max-width: 100%; text-align: left; }
+			.conversation-identity { flex: 0 0 auto; }
+			.modelInfo {
+					flex: 0 1 auto;
+					max-width: 55%;
+					margin-left: auto;
+					text-align: right;
+			}
 			.message-section { padding: 16px; }
 			.editButton { min-height: 44px; }
 			.file-attachment { width: 100%; }
 			.edit-save, .edit-cancel { min-height: 44px; }
 		}
 		@media (max-width: 400px) {
-			/* 換到第二列的是模型的位置，不是把模型標籤拉滿整列。 */
-			.conversation-identity { flex-basis: 100%; }
-			.modelInfo { flex: 0 1 auto; width: fit-content; max-width: 100%; }
 			.section-header { flex-wrap: wrap; }
 		}
 	</style>
