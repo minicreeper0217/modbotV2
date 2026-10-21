@@ -696,7 +696,6 @@ class ChatGPT(commands.Cog):
 					"instructions": instructions,
 					"input": inputs,
 					"max_output_tokens": max_tokens,
-					"top_p": 0.9,
 					"stream": True,
 					"store": False,
 					"reasoning": {"summary": "auto"},
