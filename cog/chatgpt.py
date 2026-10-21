@@ -274,14 +274,16 @@ class ChatGPT(commands.Cog):
 				"api": "responses",
 				"instructions": "",
 				"reasoning_effort": "medium",
-				"verbosity": "high"
+				"verbosity": "high",
+				"temperature": 0.8
 			},
 			"c2": {
 				"color": 0xC4B5FD,
 				"api": "responses",
 				"instructions": "",
 				"reasoning_effort": "medium",
-				"verbosity": "high"
+				"verbosity": "high",
+				"temperature": 0.8
 			},
 			"c3": {
 				"color": 0xFBBF24,
@@ -290,7 +292,8 @@ class ChatGPT(commands.Cog):
 				"instructions": "",
 				"tools": True,
 				"service_tier": "flex",
-				"max_tokens": 16384
+				"max_tokens": 16384,
+				"temperature": 0.3
 			}
 		}
 		self.reload_intro()
@@ -662,7 +665,8 @@ class ChatGPT(commands.Cog):
 													 instructions: str, res_cls: GPTres,
 													 model: str | None = None, tools: list | None = None,
 													 persist_history: bool = True, service_tier: str | None = None,
-													 reasoning_effort: str | None = None, verbosity: str | None = None) -> GPTres:
+													 reasoning_effort: str | None = None, verbosity: str | None = None,
+													 temperature: int | None = None) -> GPTres:
 		chat_uuid = self.chatgptdb.execute(
 			"SELECT uuid FROM list WHERE id = ?", (int(chatid),)
 		).fetchone()[0]
@@ -693,6 +697,8 @@ class ChatGPT(commands.Cog):
 					"instructions": instructions,
 					"input": inputs,
 					"max_output_tokens": max_tokens,
+					"temperature": temperature,
+					"top_p": 0.9,
 					"stream": True,
 					"store": False,
 					"reasoning": {"summary": "auto"},
@@ -990,6 +996,7 @@ class ChatGPT(commands.Cog):
 				message=chat_data, chatid=chatid,
 				instructions=chat_config["instructions"], res_cls=res_cls,
 				max_tokens=max_tokens or chat_config.get("max_tokens") or 8192,
+				temperature=chat_config.get("temperature"),
 				model=chat_config.get("model"),
 				tools=self.c3_tools if chat_config.get("tools") else None,
 				persist_history=False,
