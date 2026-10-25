@@ -1145,12 +1145,7 @@ class APP(commands.Cog):
 		if os.path.isfile(file_path):
 			return web.FileResponse(
 				path=file_path,
-				headers={
-					"Content-Disposition": (
-						f"attachment; filename*=UTF-8''{quote(f"image_{image_id}.png")}"
-					),
-					"Cache-Control": "private, no-store"
-				}
+				headers={"Cache-Control": "private, no-store"}
 			)
 		else:
 			return web.Response(status=404,text="")
