@@ -1049,7 +1049,10 @@ class APP(commands.Cog):
 						if os.path.exists(path):
 							os.remove(path)
 
-					shutil.rmtree(os.path.join(root, str(chatid)))
+					chat_dir = os.path.join(root, str(chatid))
+
+					if os.path.isdir(chat_dir):
+						shutil.rmtree(chat_dir)
 
 				except (OSError, ValueError):
 					logging.exception(
