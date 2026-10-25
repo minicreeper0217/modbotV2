@@ -1141,10 +1141,17 @@ class APP(commands.Cog):
 			return web.Response(status=401,text="")
 
 	async def chat_image(self, request:web.Request, image_id:str):
-		if os.path.isfile(os.path.join(config.dir, 'data', 'chatgpt', 'images', f'{image_id}.png')):
-			with open(os.path.join(config.dir, 'data', 'chatgpt', 'images', f'{image_id}.png'), 'rb') as f:
-				image_data = f.read()
-				return web.Response(status=200,body=image_data, content_type="image/png")
+		file_path = config.dir / 'data' / 'chatgpt' / 'images' / f'{image_id}.png'
+		if os.path.isfile(file_path):
+			return web.FileResponse(
+				path=file_path,
+				headers={
+					"Content-Disposition": (
+						f"attachment; filename*=UTF-8''{quote(f"image_{image_id}.png")}"
+					),
+					"Cache-Control": "private, no-store"
+				}
+			)
 		else:
 			return web.Response(status=404,text="")
 
