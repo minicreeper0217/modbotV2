@@ -1145,7 +1145,7 @@ class APP(commands.Cog):
 		if os.path.isfile(file_path):
 			return web.FileResponse(
 				path=file_path,
-				headers={"Cache-Control": "private, no-store"}
+				headers={"Cache-Control": "private, no-cache"}
 			)
 		else:
 			return web.Response(status=404,text="")
