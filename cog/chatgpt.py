@@ -322,6 +322,19 @@ class ChatGPT(commands.Cog):
 				expires_at INTEGER NOT NULL
 			)
 		""")
+		self.chatgptdb.execute("""
+			CREATE TABLE IF NOT EXISTS attachments (
+				id TEXT PRIMARY KEY,
+				chatid INTEGER NOT NULL,
+				kind TEXT NOT NULL,
+				filename TEXT NOT NULL,
+				created_at INTEGER NOT NULL
+			)
+		""")
+		self.chatgptdb.execute("""
+			CREATE INDEX IF NOT EXISTS idx_attachments_chatid
+			ON attachments(chatid)
+""")
 		self.c3_tools = self._github_tool_definitions() + [self._save_file_tool_definition()]
 
 	def _github_tool_definitions(self):
@@ -986,16 +999,6 @@ class ChatGPT(commands.Cog):
 			ephemeral=True
 		)
 
-	@chatgptcom.command(name="model")
-	async def GPT_model(self, ctx: discord.Interaction, model: int):
-		await ctx.response.defer(ephemeral=True)
-		pass
-
-	@chatgptcom.command(name="tokens")
-	async def tokens(self, ctx: discord.Interaction):
-		await ctx.response.defer(ephemeral=True)
-		pass
-
 	async def _respond(self, chatid, chat_config, chat_data, max_tokens, res_cls):
 		if chat_config["api"] == "responses":
 			return await self.chat_responses(
@@ -1064,6 +1067,26 @@ class ChatGPT(commands.Cog):
 			try:
 				image_url = attachment.url
 				image_id = await self.image_pend(image_url)
+
+				try:
+					self.chatgptdb.execute(
+						"""
+						INSERT INTO attachments
+						(id, chatid, kind, filename, created_at)
+						VALUES (?, ?, ?, ?, ?)
+						""",
+						(
+							image_id,
+							int(chatid),
+							"image",
+							f"{image_id}.png",
+							int(datetime.now().timestamp())
+						)
+					)
+				except Exception:
+					(self._chat_path("images") / f"{image_id}.png").unlink(missing_ok=True)
+					raise
+
 			except Exception as e:
 				await ctx.followup.send(str(e), ephemeral=True)
 				return
