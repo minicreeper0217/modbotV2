@@ -82,8 +82,8 @@
 			border-left: 3px solid var(--border); margin: 12px 0; padding: 6px 14px;
 			background: var(--surface-soft); color: var(--muted);
 		}
-		.message-content code,
-		.reasoning-box code {
+		.message-content code:not(pre code),
+		.reasoning-box code:not(pre code) {
 			padding: 2px 5px;
 			border-radius: 4px;
 			background: var(--code-head);
