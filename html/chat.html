@@ -214,7 +214,6 @@
 <main id="conversationContainer" aria-label="對話紀錄"></main>
 
 <script nonce="{{ nonce }}">
-import MarkdownIt from 'markdown-it'
 const chatid = window.location.pathname.split('/').pop();
 const md = MarkdownIt({
 	highlight(code, language) {
