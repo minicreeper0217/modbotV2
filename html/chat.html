@@ -215,7 +215,7 @@
 
 <script nonce="{{ nonce }}">
 const chatid = window.location.pathname.split('/').pop();
-const md = MarkdownIt({
+const md = new MarkdownIt({
 	highlight(code, language) {
 		if (!window.hljs || !language || !window.hljs.getLanguage(language)) {
 			return ''; // 沒標語言或套件沒載入時，交回 markdown-it 安全地顯示原文
