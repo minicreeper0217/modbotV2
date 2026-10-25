@@ -9,7 +9,7 @@
 	<link rel="icon" type="image/png" sizes="32x32" href="/favicon/favicon-32x32.png">
 	<link rel="icon" type="image/png" sizes="16x16" href="/favicon/favicon-16x16.png">
 	<!--<script src="https://cdnjs.cloudflare.com/ajax/libs/markdown-it/13.0.2/markdown-it.js" nonce="{{ nonce }}"></script>-->
-	<script src="https://cdn.jsdelivr.net/npm/markdown-it@15.0.3/dist/markdown-it.cjs.min.js" nonce="{{ nonce }}"></script>
+	<script src="https://cdn.jsdelivr.net/npm/markdown-it@15.0.3/dist/browser/markdown-it.umd.min.js" nonce="{{ nonce }}"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js" nonce="{{ nonce }}"></script>
 	<style>
 		:root {
@@ -215,17 +215,20 @@
 
 <script nonce="{{ nonce }}">
 const chatid = window.location.pathname.split('/').pop();
-const md = new MarkdownIt({
-	highlight(code, language) {
-		if (!window.hljs || !language || !window.hljs.getLanguage(language)) {
-			return ''; // 沒標語言或套件沒載入時，交回 markdown-it 安全地顯示原文
-		}
-		try {
-			return window.hljs.highlight(code, { language, ignoreIllegals: true }).value;
-		} catch {
-			return '';
-		}
-	}
+const md = window.markdownit({
+    highlight(code, language) {
+        if (!window.hljs || !language || !window.hljs.getLanguage(language)) {
+            return '';
+        }
+        try {
+            return window.hljs.highlight(code, {
+                language,
+                ignoreIllegals: true
+            }).value;
+        } catch {
+            return '';
+        }
+    }
 });
 md.renderer.rules.fence = (tokens, index, options) => {
 	const token = tokens[index];
@@ -242,7 +245,10 @@ md.renderer.rules.fence = (tokens, index, options) => {
 	</div>`;
 };
 // 只保留使用者原文中的單行換行；助理與思考內容仍使用原本的 Markdown 行為。
-const userMd = window.markdownit({ breaks: true, highlight: md.options.highlight });
+const userMd = window.markdownit({
+    breaks: true,
+    highlight: md.options.highlight
+});
 userMd.renderer.rules.fence = md.renderer.rules.fence;
 let editingState = null;
 fetch(`/api/chatlog/${chatid}`)
