@@ -184,15 +184,24 @@ class GPTres:
 
 	async def done(self, process_time: float):
 		self.process_time = process_time
+
 		try:
 			self.assistant_modfoo = await self.moderation(self.assistant_msg) if self.assistant_msg else ""
 		except Exception:
 			logging.exception("AI moderation failed")
 			self.assistant_modfoo = ""
+
 		self.first_token.set()
 		await asyncio.sleep(1.6)
 		self.finish = True
-		await self.send()
+
+		try:
+			await self.send()
+		except discord.HTTPException:
+			logging.exception(
+				"Discord send failed | ChatID: %s | MessageID: %s",
+				self.chatid, self.msgid
+			)
 
 	async def moderation(self, text: str) -> str:
 		headers = {
