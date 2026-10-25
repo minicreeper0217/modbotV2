@@ -1142,10 +1142,10 @@ class APP(commands.Cog):
 
 	async def chat_image(self, request:web.Request, image_id:str):
 		file_path = config.dir / 'data' / 'chatgpt' / 'images' / f'{image_id}.png'
-		if os.path.isfile(file_path):
+		if file_path.is_file():
 			return web.FileResponse(
 				path=file_path,
-				headers={"Cache-Control": "private, no-cache"}
+				headers={"Cache-Control": "private, no-store"}
 			)
 		else:
 			return web.Response(status=404,text="")
