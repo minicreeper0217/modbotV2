@@ -214,8 +214,9 @@
 <main id="conversationContainer" aria-label="對話紀錄"></main>
 
 <script nonce="{{ nonce }}">
+import MarkdownIt from 'markdown-it'
 const chatid = window.location.pathname.split('/').pop();
-const md = window.markdownit({
+const md = MarkdownIt({
 	highlight(code, language) {
 		if (!window.hljs || !language || !window.hljs.getLanguage(language)) {
 			return ''; // 沒標語言或套件沒載入時，交回 markdown-it 安全地顯示原文
