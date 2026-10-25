@@ -1012,11 +1012,68 @@ class APP(commands.Cog):
 				self.chatgptdb.execute("UPDATE list SET name = ? WHERE id = ?", (body["d"], chatid))
 				self.chatgptdb.commit()
 				return web.Response(status=200, text="")
+			
 			case "delete_chat":
-				self.chatgptdb.execute("DELETE FROM list WHERE id = ?", (chatid,))
-				self.chatgptdb.commit()
-				shutil.rmtree(os.path.join(config.dir, 'data', 'chatgpt', chatid))
+				attachments = self.chatgptdb.execute(
+					"SELECT id, kind FROM attachments WHERE chatid = ?",
+					(int(chatid),)
+				).fetchall()
+
+				root = os.path.join(config.dir, "data", "chatgpt")
+				paths = {
+					"image": lambda image_id: os.path.join(
+						root, "images", f"{image_id}.png"
+					),
+					"file": lambda file_id: os.path.join(
+						root, "attachments", file_id
+					)
+				}
+
+				try:
+					for attachment_id, kind in attachments:
+						if (
+							len(attachment_id) != 32
+							or any(c not in "0123456789abcdef" for c in attachment_id)
+						):
+							raise ValueError(
+								f"Invalid attachment ID: {attachment_id}"
+							)
+
+						if kind not in paths:
+							raise ValueError(
+								f"Unknown attachment kind: {kind}"
+							)
+
+						path = paths[kind](attachment_id)
+
+						if os.path.exists(path):
+							os.remove(path)
+
+					shutil.rmtree(os.path.join(root, str(chatid)))
+
+				except (OSError, ValueError):
+					logging.exception(
+						"Failed to delete chat or attachments: %s", chatid
+					)
+					return web.Response(status=500, text="")
+
+				self.chatgptdb.execute("BEGIN")
+				try:
+					self.chatgptdb.execute(
+						"DELETE FROM attachments WHERE chatid = ?",
+						(int(chatid),)
+					)
+					self.chatgptdb.execute(
+						"DELETE FROM list WHERE id = ?",
+						(chatid,)
+					)
+					self.chatgptdb.commit()
+				except Exception:
+					self.chatgptdb.rollback()
+					raise
+
 				return web.Response(status=200, text="")
+
 			case _:
 				return web.Response(status=400, text="")
 
