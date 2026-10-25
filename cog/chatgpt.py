@@ -1258,16 +1258,6 @@ class ChatGPT(commands.Cog):
 			chat.seek(0)
 			await ctx.followup.send(file=discord.File(fp=chat, filename=f"{chat_uuid}.txt"))
 
-	@chatgptcom.command(name="rename")
-	async def rename(self, ctx: discord.Interaction, chatid: int, name: str):
-		await ctx.response.defer(ephemeral=True)
-		pass
-
-	@chatgptcom.command(name="delete")
-	async def delete(self, ctx: discord.Interaction, chatid: int):
-		await ctx.response.defer(ephemeral=True)
-		pass
-
 	async def image_pend(self, image_url: str):
 		try:
 			if image_url.startswith("http"):
@@ -1304,68 +1294,145 @@ class ChatGPT(commands.Cog):
 		height_blocks = math.ceil(min_dimension / 512)
 		return width_blocks * height_blocks * 170 + 85
 
+
 	@chatgptcom.command(name="image")
-	async def image_generate(self, ctx: discord.Interaction, prompt: str,
-													 size: str = "1024x1024", quality: str = "standard"):
+	async def image_generate(
+		self,
+		ctx: discord.Interaction,
+		prompt: str,
+		size: str = "1024x1024",
+		quality: str = "auto",
+		background: str = "auto"
+	):
 		await ctx.response.defer(ephemeral=True)
+
 		if ctx.channel.id != config.chatgpt_image_channel:
-			await ctx.followup.send("You can't use this command at this channel!", ephemeral=True)
+			await ctx.followup.send(
+				"You can't use this command at this channel!",
+				ephemeral=True
+			)
 			return
+
 		await ctx.followup.send("Please wait...")
+
 		headers = {
 			"Content-Type": "application/json",
-			"Authorization": f"Bearer {config.chatgpt_moderations}"
+			"Authorization": f"Bearer {config.chatgpt_user}"
 		}
+
 		data = {
 			"model": self.model_image,
-			"prompt": (
-				"I NEED to test how the tool works with extremely simple prompts. "
-				f"DO NOT add any detail, just use it AS-IS: {prompt}"
-			),
-			"size": size, "quality": quality, "n": 1
+			"prompt": prompt,
+			"size": size,
+			"quality": quality,
+			"background": background,
+			"output_format": "png",
+			"n": 1
 		}
+
 		try:
-			async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=90)) as session:
+			async with aiohttp.ClientSession(
+				timeout=aiohttp.ClientTimeout(total=180)
+			) as session:
 				async with session.post(
-					"https://api.openai.com/v1/images/generations", json=data, headers=headers
+					"https://api.openai.com/v1/images/generations",
+					json=data,
+					headers=headers
 				) as response:
 					response.raise_for_status()
 					result = await response.json()
-					revised_prompt = result["data"][0]["revised_prompt"]
-					image_url = result["data"][0]["url"]
-					created = datetime.fromtimestamp(result["created"], tz=tz)
-					processing_ms = response.headers.get("openai-processing-ms", "?")
-				async with session.get(image_url) as response:
-					response.raise_for_status()
-					image_raw = await response.read()
-					image_name = yarl.URL(image_url).name
-					image_pil = Image.open(BytesIO(image_raw)).convert("RGB")
-					image_info = {
-						"prompt": prompt, "revised": revised_prompt, "size": size,
-						"quality": quality, "model": self.model_image
-					}
-					image_with_info = stepic.encode(
-						image_pil, json.dumps(image_info, ensure_ascii=False).encode()
+					processing_ms = response.headers.get(
+						"openai-processing-ms", "?"
 					)
-					image_buffer = BytesIO()
-					image_with_info.save(image_buffer, format="PNG")
+
+			image_data = result["data"][0]
+			image_raw = base64.b64decode(image_data["b64_json"])
+			revised_prompt = image_data.get("revised_prompt")
+			created = datetime.fromtimestamp(result["created"], tz=tz)
+			image_name = f"image_{uuid.uuid4().hex}.png"
+
+			usage = result.get("usage", {})
+
+			tokens = usage.get("total_tokens", "?")
+			input_tokens = usage.get("input_tokens", "?")
+			output_tokens = usage.get("output_tokens", "?")
+
+			image_pil = Image.open(BytesIO(image_raw)).convert("RGBA")
+			alpha = image_pil.getchannel("A")
+			image_rgb = image_pil.convert("RGB")
+
+			image_info = {
+				"prompt": prompt,
+				"revised": revised_prompt,
+				"size": size,
+				"quality": quality,
+				"background": background,
+				"model": self.model_image
+			}
+
+			image_with_info = stepic.encode(
+				image_rgb,
+				json.dumps(
+					image_info,
+					ensure_ascii=False
+				).encode("UTF-8")
+			)
+
+			image_with_info.putalpha(alpha)
+
+			image_buffer = BytesIO()
+			image_with_info.save(image_buffer, format="PNG")
+
 		except Exception as e:
-			await ctx.followup.send(f"Request failed! | {e}", ephemeral=True)
+			await ctx.followup.send(
+				f"Request failed! | {e}",
+				ephemeral=True
+			)
 			return
+
 		embed_list = []
-		embed = discord.Embed(color=discord.Colour(196287), description=prompt[:4096])
-		embed.set_author(name=ctx.user.display_name, icon_url=ctx.user.display_avatar.url)
+
+		embed = discord.Embed(
+			color=discord.Colour(196287),
+			description=prompt[:4096]
+		)
+		embed.set_author(
+			name=ctx.user.display_name,
+			icon_url=ctx.user.display_avatar.url
+		)
 		embed_list.append(embed)
-		embed = discord.Embed(color=discord.Colour(196193), description=revised_prompt[:4096])
+
+		embed_description = (
+			revised_prompt[:4096]
+			if revised_prompt
+			else "This model did not return a revised prompt."
+		)
+
+		embed = discord.Embed(
+			color=discord.Colour(196193),
+			description=embed_description
+		)
 		embed.set_author(name="OpenAI")
-		embed.set_footer(text=f"{self.model_image} | {size} | {quality} | {processing_ms}ms")
+		embed.set_footer(
+			text=(
+				f"{self.model_image} | {size} | {quality} | "
+				f"{background} | {tokens}({input_tokens}/{output_tokens}) | {processing_ms}ms"
+			)
+		)
 		embed.timestamp = created
+
 		image_buffer.seek(0)
-		file = discord.File(fp=image_buffer, filename=image_name)
+		file = discord.File(
+			fp=image_buffer,
+			filename=image_name
+		)
 		embed.set_image(url=f"attachment://{image_name}")
 		embed_list.append(embed)
-		await ctx.followup.send(embeds=embed_list, file=file)
 
+		await ctx.followup.send(
+			embeds=embed_list,
+			file=file
+		)
 
 async def setup(bot):
 	chatgptcog = ChatGPT(bot)
