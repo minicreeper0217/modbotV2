@@ -259,16 +259,86 @@ fetch(`/api/chatlog/${chatid}`)
 	let shouldScrollToBottom = false;
 	const textValue = value => typeof value === 'string' ? value : '';
 
-	function renderMarkdown(target, text, renderer = md) {
-		target.innerHTML = renderer.render(textValue(text));
-		// 表格比手機寬時只捲動表格，不撐寬整張卡片。
-		target.querySelectorAll('table').forEach(table => {
-			const wrapper = document.createElement('div');
-			wrapper.classList.add('table-scroll');
-			table.replaceWith(wrapper);
-			wrapper.appendChild(table);
-		});
+	
+	function fixChineseBold(text) {
+    const lines = text.split('\n');
+    let fence = null;
+
+    return lines.map(line => {
+        const match = line.match(/^\s{0,3}(`{3,}|~{3,})/);
+
+        // 程式碼區塊內的內容完全不修改
+        if (fence) {
+            const close = new RegExp(
+                '^\\s{0,3}' + fence.char +
+                '{' + fence.length + ',}\\s*$'
+            );
+
+            if (close.test(line)) fence = null;
+            return line;
+        }
+
+        if (match) {
+            fence = {
+                char: match[1][0],
+                length: match[1].length
+            };
+            return line;
+        }
+
+        // 暫時保護行內程式碼，避免修改裡面的 **
+        const inlineCode = [];
+        const protectedLine = line.replace(/(`+).*?\1/g, code => {
+            inlineCode.push(code);
+            return `ZZZMDINLINECODE${inlineCode.length - 1}ZZZ`;
+        });
+
+        // 修正中文標點緊貼粗體結尾的情況
+        const fixed = protectedLine.replace(
+            /(\*\*[^*\n]+[，。！？；：、])(\*\*)/g,
+            '$1\u200B$2'
+        );
+
+        // 還原行內程式碼
+        return fixed.replace(
+            /ZZZMDINLINECODE(\d+)ZZZ/g,
+            (_, index) => inlineCode[Number(index)]
+        );
+    }).join('\n');
 	}
+
+
+	
+	function renderMarkdown(target, text, renderer = md) {
+    const source = renderer === md
+        ? fixChineseBold(textValue(text))
+        : textValue(text);
+
+    target.innerHTML = renderer.render(source);
+
+    // 移除本次修正插入的零寬空白
+    const walker = document.createTreeWalker(
+        target,
+        NodeFilter.SHOW_TEXT
+    );
+
+    let node;
+    while ((node = walker.nextNode())) {
+        node.nodeValue = node.nodeValue.replace(
+            /([，。！？；：、])\u200B/g,
+            '$1'
+        );
+    }
+
+    // 保留原本的表格捲動功能
+    target.querySelectorAll('table').forEach(table => {
+        const wrapper = document.createElement('div');
+        wrapper.classList.add('table-scroll');
+        table.replaceWith(wrapper);
+        wrapper.appendChild(table);
+    });
+	}
+
 
 	function readable(value) {
 		if (value === '(deleted)') return '（內容已刪除）';
