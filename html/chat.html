@@ -82,6 +82,13 @@
 			border-left: 3px solid var(--border); margin: 12px 0; padding: 6px 14px;
 			background: var(--surface-soft); color: var(--muted);
 		}
+		.message-content code,
+		.reasoning-box code {
+			padding: 2px 5px;
+			border-radius: 4px;
+			background: var(--code-head);
+			font-size: 0.9em;
+		}
 		/* 讓任意 Markdown 表格有可閱讀的欄寬；長內容適度換行，超寬只捲動表格。 */
 		.table-scroll { max-width: 100%; overflow-x: auto; margin: 12px 0; }
 		.table-scroll table { width: max-content; min-width: 100%; border-collapse: collapse; font-size: .95em; }
