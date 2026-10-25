@@ -928,26 +928,13 @@ class ChatGPT(commands.Cog):
 	def _user_input(self, text: str, image_id: str | None, api: str):
 		user_message = {"role": "user", "content": text}
 		if image_id:
-			state = uuid.uuid4().hex
-			timestamp = int(datetime.now().timestamp())
-			signature = hmac.new(
-				config.secret.encode("UTF-8"),
-				f"{image_id}-{timestamp}-{state}".encode("UTF-8"), hashlib.sha256
-			).hexdigest()
-			image_url = (
-				f"https://{config.domain}/api/chatgpt/images/{image_id}"
-				f"?time={timestamp}&state={state}&token={signature}"
-			)
 			if api == "responses":
 				user_message["content"] = [
 					{"type": "input_text", "text": text},
-					{"type": "input_image", "image_url": image_url}
+					{"type": "input_image", "image_url": self.image_to_base64(image_id)}
 				]
 			else:
-				user_message["content"] = [
-					{"type": "text", "text": text},
-					{"type": "image_url", "image_url": {"url": image_url, "detail": "high"}}
-				]
+				raise RuntimeError("此聊天類型不支援圖片")
 		return user_message
 
 	def get_chat_data(self, chatid: str | int, message_id: int | None = None,
@@ -1299,6 +1286,14 @@ class ChatGPT(commands.Cog):
 			return image_id
 		except Exception as e:
 			raise ValueError(f"無法讀取圖片: {e}") from e
+
+	def image_to_base64(self, image_id: str):
+		image_path = self._chat_path("images") / f"{image_id}.png"
+
+		with image_path.open("rb") as f:
+			image_b64 = base64.b64encode(f.read()).decode("ascii")
+
+		return f"data:image/png;base64,{image_b64}"
 
 	def num_tokens_from_image(self, image_id: str):
 		with (self._chat_path("images") / f"{image_id}.png").open("rb") as f:
