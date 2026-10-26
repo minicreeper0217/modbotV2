@@ -684,7 +684,7 @@ class ChatGPT(commands.Cog):
 					return res_cls
 
 	async def chat_responses(self, message: list, max_tokens: int, chatid: str | int,
-													 instructions: str, res_cls: GPTres,
+													 res_cls: GPTres,
 													 model: str | None = None, tools: list | None = None,
 													 persist_history: bool = True, service_tier: str | None = None,
 													 reasoning_effort: str | None = None, verbosity: str | None = None) -> GPTres:
@@ -715,7 +715,6 @@ class ChatGPT(commands.Cog):
 					stage = "commentary"
 				data = {
 					"model": model or self.model,
-					"instructions": instructions,
 					"input": inputs,
 					"max_output_tokens": max_tokens,
 					"stream": True,
@@ -937,7 +936,7 @@ class ChatGPT(commands.Cog):
 				raise RuntimeError("此聊天類型不支援圖片")
 		return user_message
 
-	def get_chat_data(self, chatid: str | int, message_id: int | None = None,
+	def get_chat_data(self, chatid: str | int, message_id: int | None = None, instructions:str | None = None,
 										api: str = "completions", exclude_last_assistant: bool = False) -> tuple[list, int]:
 		msgid = self.chatgptdb.execute(
 			"SELECT msgid FROM list WHERE id = ?", (int(chatid),)
@@ -949,13 +948,13 @@ class ChatGPT(commands.Cog):
 		agent_time = datetime.now(tz=pytz.timezone("Asia/Tokyo")) - timedelta(hours=1)
 		for entry in chat_log:
 			if entry["id"] == 0:
-				if api == "responses":
+				if api == "responses" and instructions:
 					chat_data.append({
 						"role": "developer",
 						  "content": [
 								{
 									"type": "input_text",
-									"text": "",
+									"text": instructions,
 									"prompt_cache_breakpoint": {
 										"mode": "explicit"
 									}
@@ -1004,7 +1003,7 @@ class ChatGPT(commands.Cog):
 		if chat_config["api"] == "responses":
 			return await self.chat_responses(
 				message=chat_data, chatid=chatid,
-				instructions=chat_config["instructions"], res_cls=res_cls,
+				res_cls=res_cls,
 				max_tokens=max_tokens or chat_config.get("max_tokens") or 8192,
 				model=chat_config.get("model"),
 				tools=self.c3_tools if chat_config.get("tools") else None,
@@ -1093,7 +1092,7 @@ class ChatGPT(commands.Cog):
 				return
 
 		await ctx.followup.send("Please wait...")
-		chat_data, msgid = self.get_chat_data(chatid, api=chat_config["api"])
+		chat_data, msgid = self.get_chat_data(chatid, api=chat_config["api"], instructions=chat_config.get("instructions"))
 		chat_data.append(self._user_input(text, image_id, chat_config["api"]))
 		msgid += 1
 		res_cls = GPTres(
