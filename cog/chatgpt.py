@@ -725,7 +725,6 @@ class ChatGPT(commands.Cog):
 					"reasoning": {"summary": "auto"},
 					"service_tier": service_tier or "default",
 					"include": ["reasoning.encrypted_content"],
-					"prompt_cache_key": f"discord-chat-{chatid}",
 					"safety_identifier": chat_uuid
 				}
 				if reasoning_effort is not None:
@@ -1004,8 +1003,13 @@ class ChatGPT(commands.Cog):
 
 		# 超過 5 筆才啟用歷史快取
 		cache_position = None
+
 		if is_responses and completed_count > 5:
-			cache_position = int(completed_count * 0.7)
+			bucket_size = 5
+			position = ((completed_count - 1) // bucket_size) * bucket_size
+
+			if position > 0:
+				cache_position = position
 
 		# 系統設定
 		system_entry = next(
