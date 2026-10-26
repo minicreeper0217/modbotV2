@@ -120,11 +120,12 @@ class IntroView(discord.ui.View):
     return True
 
 class GPTres:
-	def __init__(self, chatid, msgid, ctx: discord.Interaction, color,
+	def __init__(self, chatid, msgid, ctx: discord.Interaction, color, api,
 							 image_url=None, image_id=None, user_msg=None):
 		self.chatid = chatid
 		self.msgid = msgid
 		self.ctx = ctx
+		self.api = api
 		self.color = color
 		self.image_url = image_url
 		self.usage = None
@@ -238,6 +239,8 @@ class GPTres:
 						f"tokens: {self.usage['total_tokens']}"
 						f"({self.usage['prompt_tokens']}/{self.usage['completion_tokens']})"
 					)
+					if self.api == "responses":
+						usage_text += f"[{self.usage['cached_tokens']}]"
 				else:
 					usage_text = "tokens: unknown"
 				embed.set_footer(text=(
@@ -828,9 +831,11 @@ class ChatGPT(commands.Cog):
 				if result is None:
 					raise RuntimeError("Responses API stream ended unexpectedly")
 				usage = result.get("usage") or {}
+				input_details = usage.get("input_tokens_details") or {}
 				total_usage["prompt_tokens"] += usage.get("input_tokens", 0)
 				total_usage["completion_tokens"] += usage.get("output_tokens", 0)
 				total_usage["total_tokens"] += usage.get("total_tokens", 0)
+				total_usage["cached_tokens"] += input_details.get("cached_tokens", 0)
 				res_cls.usage = total_usage.copy()
 				res_cls.completion_id = result.get("id")
 				res_cls.model = result.get("model")
@@ -1114,7 +1119,7 @@ class ChatGPT(commands.Cog):
 		msgid += 1
 		res_cls = GPTres(
 			chatid=chatid, msgid=msgid, ctx=ctx, user_msg=text,
-			image_id=image_id, image_url=image_url, color=chat_config["color"]
+			image_id=image_id, image_url=image_url, color=chat_config["color"], api=chat_config["api"]
 		)
 		try:
 			result = await self._respond(chatid, chat_config, chat_data, max_tokens, res_cls)
@@ -1201,7 +1206,7 @@ class ChatGPT(commands.Cog):
 			await ctx.followup.send("Cut chat log failed", ephemeral=True)
 			return
 		await ctx.followup.send("Please wait...")
-		res_cls = GPTres(chatid=chatid, msgid=target_id, ctx=ctx, color=chat_config["color"])
+		res_cls = GPTres(chatid=chatid, msgid=target_id, ctx=ctx, color=chat_config["color"], api=chat_config["api"])
 		try:
 			result = await self._respond(chatid, chat_config, chat_data, max_tokens, res_cls)
 		except Exception as e:
