@@ -732,18 +732,35 @@ class ChatGPT(commands.Cog):
 					data["tools"] = tools
 					data["tool_choice"] = "auto" if stage == "tools" else "none"
 
+				
 				if stage == "commentary":
-					data["instructions"] += (
+					stage_instruction = (
 						"\n\nProvide a brief progress update for the user based on "
 						"the tool results. Explain what you have found and what "
 						"you will investigate next, or provide the final answer."
 					)
-
 				elif stage == "final":
-					data["instructions"] += (
+					stage_instruction = (
 						"\n\nAll tool rounds are complete. "
 						"Provide the final answer using the available information."
 					)
+				else:
+					stage_instruction = None
+
+				request_inputs = copy.deepcopy(inputs)
+
+				if stage_instruction:
+					request_inputs.append({
+						"role": "developer",
+						"content": [
+							{
+								"type": "input_text",
+								"text": stage_instruction
+							}
+						]
+					})
+
+				data["input"] = request_inputs
 
 				result = None
 				message_phases = {}
@@ -1178,7 +1195,7 @@ class ChatGPT(commands.Cog):
 
 		chat_data, _ = self.get_chat_data(
 			chatid, message_id=target_id, api=chat_config["api"],
-			exclude_last_assistant=True
+			exclude_last_assistant=True, instructions=chat_config.get("instructions")
 		)
 		if len(chat_data) <= 1:
 			await ctx.followup.send("Cut chat log failed", ephemeral=True)
