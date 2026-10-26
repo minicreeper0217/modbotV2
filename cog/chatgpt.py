@@ -949,6 +949,19 @@ class ChatGPT(commands.Cog):
 		agent_time = datetime.now(tz=pytz.timezone("Asia/Tokyo")) - timedelta(hours=1)
 		for entry in chat_log:
 			if entry["id"] == 0:
+				if api == "responses":
+					chat_data.append({
+						"role": "developer",
+						  "content": [
+								{
+									"type": "input_text",
+									"text": "",
+									"prompt_cache_breakpoint": {
+										"mode": "explicit"
+									}
+								}
+							]
+					})
 				system_content = (
 					"Region: Japan\n"
 					f"Time Now: {agent_time.isoformat(timespec='seconds')}\n"
