@@ -12,7 +12,7 @@ import sqlite3
 import time
 import uuid
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlencode
@@ -946,11 +946,12 @@ class ChatGPT(commands.Cog):
 			chat_log = json.load(f)
 		chat_data = []
 		last_id = chat_log[-1]["id"]
+		agent_time = datetime.now(tz=pytz.timezone("Asia/Tokyo")) - timedelta(hours=1)
 		for entry in chat_log:
 			if entry["id"] == 0:
 				system_content = (
 					"Region: Japan\n"
-					f"Time Now: {datetime.now(tz=tz).isoformat(timespec='seconds')}\n"
+					f"Time Now: {agent_time.isoformat(timespec='seconds')}\n"
 					"Note: The time will be updated each time it is sent.\n\n"
 					f"{entry['system']}"
 				)
