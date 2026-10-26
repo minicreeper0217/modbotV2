@@ -1081,20 +1081,30 @@ class ChatGPT(commands.Cog):
 
 			history_index += 1
 
-			# 在約 70% 的完整歷史位置加入斷點
 			if history_index == cache_position:
-				chat_data.append({
-					"role": "developer",
-					"content": [
-						{
+				for message in reversed(chat_data):
+					content = message.get("content")
+
+					if isinstance(content, list):
+						for item in reversed(content):
+							if item.get("type") == "input_text":
+								item["prompt_cache_breakpoint"] = {
+									"mode": "explicit"
+								}
+								break
+						else:
+							continue
+						break
+
+					elif isinstance(content, str):
+						message["content"] = [{
 							"type": "input_text",
-							"text": "",
+							"text": content,
 							"prompt_cache_breakpoint": {
 								"mode": "explicit"
 							}
-						}
-					]
-				})
+						}]
+						break
 
 		# Responses API 的動態時間放在歷史後面
 		if is_responses:
