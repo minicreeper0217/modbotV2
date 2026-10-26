@@ -703,7 +703,7 @@ class ChatGPT(commands.Cog):
 		}
 		timeout = aiohttp.ClientTimeout(total=None, sock_connect=30, sock_read=610)
 		start_time = time.perf_counter()
-		total_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+		total_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cached_tokens": 0}
 		last_reasoning_item = None
 
 		async with aiohttp.ClientSession(timeout=timeout) as session:
