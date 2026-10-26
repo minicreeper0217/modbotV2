@@ -958,53 +958,154 @@ class ChatGPT(commands.Cog):
 				raise RuntimeError("此聊天類型不支援圖片")
 		return user_message
 
-	def get_chat_data(self, chatid: str | int, message_id: int | None = None, instructions:str | None = None,
-										api: str = "completions", exclude_last_assistant: bool = False) -> tuple[list, int]:
+
+	def get_chat_data(
+		self, chatid: str | int,
+		message_id: int | None = None,
+		instructions: str | None = None,
+		api: str = "completions",
+		exclude_last_assistant: bool = False
+	) -> tuple[list, int]:
 		msgid = self.chatgptdb.execute(
-			"SELECT msgid FROM list WHERE id = ?", (int(chatid),)
+			"SELECT msgid FROM list WHERE id = ?",
+			(int(chatid),)
 		).fetchone()[0]
-		with (self._chat_path(chatid) / "chat.json").open("r", encoding="UTF-8") as f:
+
+		with (self._chat_path(chatid) / "chat.json").open(
+			"r", encoding="UTF-8"
+		) as f:
 			chat_log = json.load(f)
+
 		chat_data = []
-		last_id = chat_log[-1]["id"]
-		agent_time = datetime.now(tz=pytz.timezone("Asia/Tokyo")) - timedelta(hours=1)
-		for entry in chat_log:
-			if entry["id"] == 0:
-				if api == "responses" and instructions:
-					chat_data.append({
-						"role": "developer",
-						  "content": [
-								{
-									"type": "input_text",
-									"text": instructions,
-									"prompt_cache_breakpoint": {
-										"mode": "explicit"
-									}
-								}
-							]
-					})
+		is_responses = api == "responses"
+
+		agent_time = (
+			datetime.now(tz=pytz.timezone("Asia/Tokyo"))
+			- timedelta(hours=1)
+		)
+
+		entries = [
+			entry for entry in chat_log
+			if entry["id"] != 0
+		]
+
+		# 先根據 message_id 切割歷史
+		if message_id is not None:
+			for i, entry in enumerate(entries):
+				if entry["id"] == message_id:
+					entries = entries[:i + 1]
+					break
+
+		# regenerate 不包含目標訊息的 assistant 回答
+		completed_count = len(entries)
+		if exclude_last_assistant and completed_count:
+			completed_count -= 1
+
+		# 超過 5 筆才啟用歷史快取
+		cache_position = None
+		if is_responses and completed_count > 5:
+			cache_position = int(completed_count * 0.7)
+
+		# 系統設定
+		system_entry = next(
+			(entry for entry in chat_log if entry["id"] == 0),
+			None
+		)
+
+		if system_entry is not None:
+			if is_responses and instructions:
+				chat_data.append({
+					"role": "developer",
+					"content": [
+						{
+							"type": "input_text",
+							"text": instructions,
+							"prompt_cache_breakpoint": {
+								"mode": "explicit"
+							}
+						}
+					]
+				})
+
+			system_content = system_entry["system"]
+
+			if not is_responses:
 				system_content = (
 					"Region: Japan\n"
 					f"Time Now: {agent_time.isoformat(timespec='seconds')}\n"
 					"Note: The time will be updated each time it is sent.\n\n"
-					f"{entry['system']}"
+					f"{system_content}"
 				)
-				chat_data.append({
-					"role": "system" if api == "responses" else "user",
-					"content": system_content
-				})
-				continue
-			chat_data.append(self._user_input(entry["user"], entry.get("image_url"), api))
-			is_target = entry["id"] == (message_id if message_id is not None else last_id)
-			if exclude_last_assistant and is_target:
-				return chat_data, msgid
-			if api == "responses" and "response_items" in entry:
-				response_items = copy.deepcopy(entry["response_items"])
-				chat_data.extend(response_items)
+
+			chat_data.append({
+				"role": "system" if is_responses else "user",
+				"content": system_content
+			})
+
+		# regenerate 的目標 user 訊息先暫存
+		pending_user = None
+		history_index = 0
+
+		for entry in entries:
+			user_input = self._user_input(
+				entry["user"],
+				entry.get("image_url"),
+				api
+			)
+
+			is_target = (
+				exclude_last_assistant
+				and entry is entries[-1]
+			)
+
+			if is_target:
+				pending_user = user_input
+				break
+
+			chat_data.append(user_input)
+
+			if is_responses and "response_items" in entry:
+				chat_data.extend(
+					copy.deepcopy(entry["response_items"])
+				)
 			else:
-				chat_data.append({"role": "assistant", "content": entry["assistant"]})
-			if message_id is not None and is_target:
-				return chat_data, msgid
+				chat_data.append({
+					"role": "assistant",
+					"content": entry["assistant"]
+				})
+
+			history_index += 1
+
+			# 在約 70% 的完整歷史位置加入斷點
+			if history_index == cache_position:
+				chat_data.append({
+					"role": "developer",
+					"content": [
+						{
+							"type": "input_text",
+							"text": "",
+							"prompt_cache_breakpoint": {
+								"mode": "explicit"
+							}
+						}
+					]
+				})
+
+		# Responses API 的動態時間放在歷史後面
+		if is_responses:
+			chat_data.append({
+				"role": "system",
+				"content": (
+					"Region: Japan\n"
+					f"Time Now: {agent_time.isoformat(timespec='seconds')}\n"
+					"Note: The time will be updated each time it is sent."
+				)
+			})
+
+		# regenerate 的目標 user 訊息放在最後
+		if pending_user is not None:
+			chat_data.append(pending_user)
+
 		return chat_data, msgid
 
 	@chatgptcom.command(name="intro", description="Modify agent instructions")
