@@ -240,7 +240,7 @@ class GPTres:
 						f"({self.usage['prompt_tokens']}/{self.usage['completion_tokens']})"
 					)
 					if self.api == "responses":
-						usage_text += f"[{self.usage['cached_tokens']}]"
+						usage_text += f" | cached: {self.usage['cached_tokens']}"
 				else:
 					usage_text = "tokens: unknown"
 				embed.set_footer(text=(
