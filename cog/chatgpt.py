@@ -725,6 +725,7 @@ class ChatGPT(commands.Cog):
 					"reasoning": {"summary": "auto"},
 					"service_tier": service_tier or "default",
 					"include": ["reasoning.encrypted_content"],
+					"prompt_cache_key": f"discord-chat-{chatid}",
 					"safety_identifier": chat_uuid
 				}
 				if reasoning_effort is not None:
