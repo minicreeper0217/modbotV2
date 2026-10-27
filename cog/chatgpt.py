@@ -12,7 +12,7 @@ import sqlite3
 import time
 import uuid
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time as dt_time
 from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlencode
@@ -966,7 +966,7 @@ class ChatGPT(commands.Cog):
 			return True
 
 		# 平日 17:00～隔天 09:00
-		return now.time() >= time(17, 0) or now.time() < time(9, 0)
+		return now.time() >= dt_time(17, 0) or now.time() < dt_time(9, 0)
 	
 	def get_chat_data(
 		self, chatid: str | int,
