@@ -16,3 +16,4 @@ cryptography
 stepic
 pynacl
 cbor2
+holidays

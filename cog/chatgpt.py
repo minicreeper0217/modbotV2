@@ -22,7 +22,7 @@ import discord
 import pytz
 import stepic
 import tiktoken
-import yarl
+import holidays
 
 from discord import app_commands
 from discord.ext import commands
@@ -33,6 +33,7 @@ from github import GitHub
 
 
 tz = pytz.timezone("Asia/Taipei")
+tw_holidays = holidays.TW(observed=True)
 
 class IntroModal(discord.ui.Modal):
 	def __init__(self, cog, chat_type: str):
@@ -287,7 +288,7 @@ class ChatGPT(commands.Cog):
 				"instructions": "",
 				"reasoning_effort": "medium",
 				"verbosity": "high",
-				"temperature": 0.8
+				"cache_12h_ttl": True
 			},
 			"c2": {
 				"color": 0xC4B5FD,
@@ -295,7 +296,6 @@ class ChatGPT(commands.Cog):
 				"instructions": "",
 				"reasoning_effort": "medium",
 				"verbosity": "high",
-				"temperature": 0.8
 			},
 			"c3": {
 				"color": 0xFBBF24,
@@ -305,7 +305,6 @@ class ChatGPT(commands.Cog):
 				"tools": True,
 				"service_tier": "flex",
 				"max_tokens": 16384,
-				"temperature": 0.3
 			}
 		}
 		self.reload_intro()
@@ -958,13 +957,24 @@ class ChatGPT(commands.Cog):
 				raise RuntimeError("此聊天類型不支援圖片")
 		return user_message
 
+	@staticmethod
+	def is_off_time() -> bool:
+		now = datetime.now(tz=tz)
 
+		# 週末或國定假日（包含套件支援的補假）
+		if now.weekday() >= 5 or now.date() in tw_holidays:
+			return True
+
+		# 平日 17:00～隔天 09:00
+		return now.time() >= time(17, 0) or now.time() < time(9, 0)
+	
 	def get_chat_data(
 		self, chatid: str | int,
 		message_id: int | None = None,
 		instructions: str | None = None,
 		api: str = "completions",
-		exclude_last_assistant: bool = False
+		exclude_last_assistant: bool = False,
+		cache_12h_ttl:bool = False
 	) -> tuple[list, int]:
 		msgid = self.chatgptdb.execute(
 			"SELECT msgid FROM list WHERE id = ?",
@@ -1002,14 +1012,18 @@ class ChatGPT(commands.Cog):
 			completed_count -= 1
 
 		# 超過 5 筆才啟用歷史快取
-		cache_position = None
+		cache_positions = set()
+		cache_ttl = "12h" if cache_12h_ttl and self.is_off_time() else "30m"
 
 		if is_responses and completed_count > 5:
 			bucket_size = 5
 			position = ((completed_count - 1) // bucket_size) * bucket_size
 
 			if position > 0:
-				cache_position = position
+				cache_positions.add(position)
+
+			if position - bucket_size > 0:
+				cache_positions.add(position - bucket_size)
 
 		# 系統設定
 		system_entry = next(
@@ -1026,7 +1040,8 @@ class ChatGPT(commands.Cog):
 							"type": "input_text",
 							"text": instructions,
 							"prompt_cache_breakpoint": {
-								"mode": "explicit"
+								"mode": "explicit",
+								"ttl": cache_ttl
 							}
 						}
 					]
@@ -1081,7 +1096,7 @@ class ChatGPT(commands.Cog):
 
 			history_index += 1
 
-			if history_index == cache_position:
+			if history_index in cache_positions:
 				for message in reversed(chat_data):
 					content = message.get("content")
 
@@ -1089,7 +1104,8 @@ class ChatGPT(commands.Cog):
 						for item in reversed(content):
 							if item.get("type") == "input_text":
 								item["prompt_cache_breakpoint"] = {
-									"mode": "explicit"
+									"mode": "explicit",
+									"ttl": cache_ttl
 								}
 								break
 						else:
@@ -1101,7 +1117,8 @@ class ChatGPT(commands.Cog):
 							"type": "input_text",
 							"text": content,
 							"prompt_cache_breakpoint": {
-								"mode": "explicit"
+								"mode": "explicit",
+								"ttl": cache_ttl
 							}
 						}]
 						break
@@ -1230,7 +1247,12 @@ class ChatGPT(commands.Cog):
 				return
 
 		await ctx.followup.send("Please wait...")
-		chat_data, msgid = self.get_chat_data(chatid, api=chat_config["api"], instructions=chat_config.get("instructions"))
+		chat_data, msgid = self.get_chat_data(
+			chatid, 
+			api=chat_config["api"], 
+			instructions=chat_config.get("instructions"),
+			cache_12h_ttl=chat_config.get("cache_12h_ttl")
+			)
 		chat_data.append(self._user_input(text, image_id, chat_config["api"]))
 		msgid += 1
 		res_cls = GPTres(
@@ -1316,7 +1338,8 @@ class ChatGPT(commands.Cog):
 
 		chat_data, _ = self.get_chat_data(
 			chatid, message_id=target_id, api=chat_config["api"],
-			exclude_last_assistant=True, instructions=chat_config.get("instructions")
+			exclude_last_assistant=True, instructions=chat_config.get("instructions"),
+			cache_12h_ttl=chat_config.get("cache_12h_ttl")
 		)
 		if len(chat_data) <= 1:
 			await ctx.followup.send("Cut chat log failed", ephemeral=True)
