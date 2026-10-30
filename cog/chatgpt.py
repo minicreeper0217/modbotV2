@@ -1012,12 +1012,12 @@ class ChatGPT(commands.Cog):
 		if exclude_last_assistant and completed_count:
 			completed_count -= 1
 
-		# 超過 5 筆才啟用歷史快取
+		# 超過 3 筆才啟用歷史快取
 		cache_positions = set()
-		cache_ttl = "12h" if cache_12h_ttl and self.is_off_time() else "30m"
+		cache_ttl = "12h" if cache_12h_ttl else "30m"
 
-		if is_responses and completed_count > 5:
-			bucket_size = 5
+		if is_responses and completed_count > 3:
+			bucket_size = 3
 			position = ((completed_count - 1) // bucket_size) * bucket_size
 
 			if position > 0:
