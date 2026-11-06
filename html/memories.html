@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Memories | modbot</title>
+  <link rel="apple-touch-icon" sizes="120x120" href="/favicon/apple-touch-icon.png">
+  <link rel="icon" type="image/x-icon" href="/favicon/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon/favicon-16x16.png">
+  <style>
+    :root {
+      color-scheme: light dark;
+      --page: #f5f6f8; --surface: #fff; --surface-soft: #f7f8fb;
+      --surface-hover: #eef0f5; --text: #202330; --muted: #565e70;
+      --border: #dce0e8; --accent: #5865f2; --accent-soft: rgba(88, 101, 242, .12);
+      --shadow: 0 3px 16px rgba(30, 38, 56, .045);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--page); color: var(--text);
+      font-family: 'Microsoft JhengHei', system-ui, sans-serif; line-height: 1.6; }
+    button, textarea { font: inherit; }
+    button:disabled { opacity: .55; cursor: not-allowed !important; }
+    #tab-c1 { background: #DCFCE7; color: #16A34A; }
+    #tab-c2 { background: #EDE9FE; color: #8B5CF6; }
+    :where(button, a, textarea, input):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .page-header { width: 100%; min-height: 72px;
+      padding: 14px max(20px, calc((100vw - 960px) / 2));
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      background: var(--surface); border-bottom: 1px solid var(--border); }
+    .logo { color: var(--text); font-size: 21px; font-weight: 750; text-decoration: none; white-space: nowrap; }
+    .page-actions { display: flex; align-items: center; gap: 9px; }
+    .action-button { min-height: 40px; padding: 7px 18px; border: 1px solid transparent;
+      border-radius: 8px; color: #fff; background: #248046; cursor: pointer; font-weight: 600; }
+    .container { width: min(100% - 40px, 860px); margin: 28px auto 64px; min-width: 0; }
+    .toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;
+      gap: 12px; margin-bottom: 16px; }
+    .tabs { display: flex; gap: 8px; }
+    .tab, .add-button { min-height: 40px; padding: 7px 16px; border: 1px solid var(--border);
+      border-radius: 8px; background: var(--surface); color: var(--text); cursor: pointer; font-weight: 650; }
+    .tab:hover:not(:disabled), .add-button:hover:not(:disabled) { background: var(--surface-hover); }
+    .tab[aria-selected="true"] { color: var(--accent); border-color: var(--accent);
+      background: var(--accent-soft); }
+    .summary { color: var(--muted); font-size: 14px; margin: 0 0 14px; }
+    .status { min-height: 1.6em; margin: 0 0 14px; color: var(--muted); overflow-wrap: anywhere; }
+    .status.error { color: #b63137; }
+    .status.success { color: #248046; }
+    .memory-list { display: flex; flex-direction: column; gap: 14px; }
+    .memory-card { min-width: 0; padding: 18px 20px; background: var(--surface);
+      border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); }
+    .memory-card.unselected { opacity: .65; }
+    .memory-head { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
+    .memory-check { width: 18px; height: 18px; flex: none; margin: 4px 0 0;
+      accent-color: var(--accent); cursor: pointer; }
+    .memory-identity { min-width: 0; }
+    .memory-title { font-weight: 700; }
+    .memory-uuid { display: block; color: var(--muted); font-size: 12px;
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
+    .memory-content { display: block; width: 100%; min-height: 104px; max-height: 50vh;
+      padding: 10px 12px; resize: vertical; background: var(--surface); color: var(--text);
+      border: 1px solid var(--border); border-radius: 8px; font-size: 16px; }
+    .empty { padding: 28px 20px; text-align: center; background: var(--surface);
+      border: 1px dashed var(--border); border-radius: 14px; color: var(--muted); }
+    @media (prefers-color-scheme: dark) {
+      :root { --page: #171a20; --surface: #23272f; --surface-soft: #2a303a;
+        --surface-hover: #343d49; --text: #f1f3f7; --muted: #b9c1cf;
+        --border: #414956; --accent: #9ba5ff; --accent-soft: rgba(155, 165, 255, .22);
+        --shadow: 0 3px 16px rgba(0, 0, 0, .12); }
+      .status.error { color: #ff9c9c; }
+      .status.success { color: #86efac; }
+      #tab-c1 { background: #14532D; color: #86EFAC; }
+      #tab-c2 { background: #4C1D95; color: #C4B5FD; }
+    }
+    @media (max-width: 600px) {
+      .page-header { padding: 12px 16px; flex-wrap: wrap; min-height: 0; }
+      .page-actions { width: 100%; justify-content: flex-end; }
+      .action-button, .tab, .add-button { min-height: 44px; }
+      .container { width: calc(100% - 24px); margin: 16px auto 40px; }
+      .memory-card { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="page-header">
+    <a class="logo" href="/">modbot.dev</a>
+    <div class="page-actions">
+      <button id="submitBtn" class="action-button" type="button" disabled>送出</button>
+    </div>
+  </header>
+  <main class="container">
+    <div class="toolbar">
+      <div class="tabs" role="tablist" aria-label="記憶類型">
+        <button class="tab" id="tab-c1" type="button" role="tab" aria-selected="true" aria-controls="memoryList" data-type="c1" disabled>C1</button>
+        <button class="tab" id="tab-c2" type="button" role="tab" aria-selected="false" aria-controls="memoryList" data-type="c2" disabled>C2</button>
+      </div>
+      <button id="addBtn" class="add-button" type="button" disabled>＋ 新增記憶</button>
+    </div>
+    <p id="summary" class="summary"></p>
+    <p id="status" class="status" role="status" aria-live="polite">載入記憶中…</p>
+    <div id="memoryList" class="memory-list" role="tabpanel" aria-label="C1 記憶"></div>
+  </main>
+  <script nonce="{{ nonce }}">
+    'use strict';
+    const TYPES = ['c1', 'c2'];
+    const tabs = [...document.querySelectorAll('.tab')];
+    const submitBtn = document.getElementById('submitBtn');
+    const addBtn = document.getElementById('addBtn');
+    const list = document.getElementById('memoryList');
+    const summary = document.getElementById('summary');
+    const status = document.getElementById('status');
+    const drafts = Object.create(null);
+    let active = 'c1';
+    let busy = false;
+
+    function setStatus(text, kind = '') {
+      status.textContent = text;
+      status.className = kind ? `status ${kind}` : 'status';
+    }
+
+    function parseData(data) {
+      if (!data || typeof data !== 'object') throw new Error('記憶資料格式錯誤');
+      const parsed = Object.create(null);
+      for (const type of TYPES) {
+        const part = data[type];
+        if (!part || typeof part.v !== 'string' || !Array.isArray(part.d)) {
+          throw new Error(`${type.toUpperCase()} 記憶資料格式錯誤`);
+        }
+        const ids = new Set();
+        const items = part.d.map(item => {
+          if (!item || typeof item.uuid !== 'string' || !item.uuid ||
+              typeof item.content !== 'string' || ids.has(item.uuid)) {
+            throw new Error(`${type.toUpperCase()} 記憶項目格式錯誤`);
+          }
+          ids.add(item.uuid);
+          return { uuid: item.uuid, content: item.content, selected: true };
+        });
+        parsed[type] = { v: part.v, items, baseline: JSON.stringify(part.d) };
+      }
+      return parsed;
+    }
+
+    async function fetchMemories() {
+      const response = await fetch('/api/chat/memories', {
+        credentials: 'same-origin', cache: 'no-store'
+      });
+      if (!response.ok) throw new Error(`讀取失敗（HTTP ${response.status}）`);
+      return parseData(await response.json());
+    }
+
+    function selectedItems(type) {
+      return drafts[type].items.filter(item => item.selected)
+        .map(item => ({ uuid: item.uuid, content: item.content }));
+    }
+
+    function isDirty(type) {
+      return drafts[type] && JSON.stringify(selectedItems(type)) !== drafts[type].baseline;
+    }
+
+    function updateSummary() {
+      if (!drafts[active]) return;
+      const items = drafts[active].items;
+      const kept = items.filter(item => item.selected).length;
+      const removed = items.length - kept;
+      summary.textContent = `${active.toUpperCase()}：保留 ${kept} 筆` +
+        (removed ? `，取消勾選 ${removed} 筆（送出後刪除）` : '') +
+        (isDirty(active) ? ' · 尚未送出' : ' · 已同步');
+      for (const tab of tabs) {
+        const type = tab.dataset.type;
+        tab.textContent = type.toUpperCase() + (isDirty(type) ? ' *' : '');
+      }
+    }
+
+    function setBusy(value) {
+      busy = value;
+      submitBtn.disabled = value || !drafts[active];
+      addBtn.disabled = value || !drafts[active];
+      tabs.forEach(tab => { tab.disabled = value || !drafts[tab.dataset.type]; });
+      list.querySelectorAll('input, textarea').forEach(control => { control.disabled = value; });
+    }
+
+    function render() {
+      list.replaceChildren();
+      if (!drafts[active]) return;
+      const items = drafts[active].items;
+      list.setAttribute('aria-label', `${active.toUpperCase()} 記憶`);
+      tabs.forEach(tab => tab.setAttribute('aria-selected', String(tab.dataset.type === active)));
+      updateSummary();
+      if (!items.length) {
+        const empty = document.createElement('div');
+        empty.className = 'empty';
+        empty.textContent = '目前沒有記憶，按「新增記憶」開始。';
+        list.appendChild(empty);
+        return;
+      }
+      items.forEach((item, index) => {
+        const card = document.createElement('article');
+        card.className = 'memory-card' + (item.selected ? '' : ' unselected');
+        const head = document.createElement('div');
+        head.className = 'memory-head';
+        const check = document.createElement('input');
+        check.type = 'checkbox';
+        check.className = 'memory-check';
+        check.checked = item.selected;
+        check.disabled = busy;
+        const contentId = `memory-${index}`;
+        check.setAttribute('aria-label', `保留記憶 ${item.uuid}`);
+        check.addEventListener('change', () => {
+          item.selected = check.checked;
+          card.classList.toggle('unselected', !item.selected);
+          updateSummary();
+        });
+        const identity = document.createElement('div');
+        identity.className = 'memory-identity';
+        const title = document.createElement('label');
+        title.className = 'memory-title';
+        title.htmlFor = contentId;
+        title.textContent = `記憶 #${index + 1}`;
+        const uuid = document.createElement('span');
+        uuid.className = 'memory-uuid';
+        uuid.textContent = `UUID：${item.uuid}`;
+        identity.append(title, uuid);
+        head.append(check, identity);
+        const textarea = document.createElement('textarea');
+        textarea.id = contentId;
+        textarea.className = 'memory-content';
+        textarea.value = item.content;
+        textarea.disabled = busy;
+        textarea.addEventListener('input', () => {
+          item.content = textarea.value;
+          updateSummary();
+        });
+        card.append(head, textarea);
+        list.appendChild(card);
+      });
+    }
+
+    tabs.forEach(tab => tab.addEventListener('click', () => {
+      if (busy || !drafts[tab.dataset.type]) return;
+      active = tab.dataset.type;
+      setStatus('');
+      render();
+    }));
+
+    addBtn.addEventListener('click', () => {
+      if (busy || !drafts[active]) return;
+      if (!globalThis.crypto || typeof crypto.randomUUID !== 'function') {
+        setStatus('此瀏覽器無法產生 UUID，請使用 HTTPS 與支援 crypto.randomUUID 的瀏覽器。', 'error');
+        return;
+      }
+      let uuid;
+      do { uuid = crypto.randomUUID().replaceAll('-', ''); }
+      while (drafts[active].items.some(item => item.uuid === uuid));
+      drafts[active].items.push({ uuid, content: '', selected: true });
+      render();
+      const last = list.querySelector('.memory-card:last-child textarea');
+      last?.focus();
+      last?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+
+    submitBtn.addEventListener('click', async () => {
+      if (busy || !drafts[active]) return;
+      const type = active;
+      const outgoing = selectedItems(type);
+      if (outgoing.some(item => !item.content.trim())) {
+        setStatus('勾選保留的記憶內容不能為空。', 'error');
+        return;
+      }
+      const ids = new Set(outgoing.map(item => item.uuid));
+      if (ids.size !== outgoing.length) {
+        setStatus('記憶 UUID 不可重複。', 'error');
+        return;
+      }
+      const previous = JSON.parse(drafts[type].baseline);
+      const removed = previous.filter(item => !ids.has(item.uuid)).length;
+      if (removed && !window.confirm(`這次送出將刪除 ${removed} 筆 ${type.toUpperCase()} 記憶，確定嗎？`)) return;
+      setBusy(true);
+      setStatus('送出中…');
+      try {
+        const response = await fetch(`/api/chat/memories?type=${encodeURIComponent(type)}`, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ v: drafts[type].v, d: outgoing })
+        });
+        if (response.status === 409) {
+          setStatus('版本衝突：記憶已被其他操作更新，草稿未送出。', 'error');
+          if (window.confirm('記憶已更新。要重新載入目前類型嗎？這會捨棄目前類型尚未送出的修改。')) {
+            const latest = await fetchMemories();
+            drafts[type] = latest[type];
+            render();
+            setStatus('已載入最新記憶；另一類型的草稿未更動。');
+          }
+          return;
+        }
+        if (!response.ok) throw new Error(`送出失敗（HTTP ${response.status}）`);
+        // 不假設 POST 的回應格式；重新 GET 取得伺服器認定的最新版本。
+        const latest = await fetchMemories();
+        drafts[type] = latest[type];
+        render();
+        setStatus(`${type.toUpperCase()} 記憶已送出。`, 'success');
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : '發生未知錯誤', 'error');
+      } finally {
+        setBusy(false);
+      }
+    });
+
+    window.addEventListener('beforeunload', event => {
+      if (TYPES.some(isDirty)) {
+        event.preventDefault();
+        event.returnValue = '';
+      }
+    });
+
+    fetchMemories().then(data => {
+      for (const type of TYPES) drafts[type] = data[type];
+      setBusy(false);
+      setStatus('');
+      render();
+    }).catch(error => {
+      setStatus(error instanceof Error ? error.message : '載入記憶失敗', 'error');
+    });
+  </script>
+</body>
+</html>

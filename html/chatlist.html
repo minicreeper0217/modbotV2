@@ -176,6 +176,18 @@
 		padding: 4px 8px;
 		cursor: pointer;
 	}
+	.memory-link {
+		position: absolute;
+		top: 24px;
+		right: 24px;
+		padding: 7px 16px;
+		border-radius: 8px;
+		background: #248046;
+		color: white;
+		text-decoration: none;
+		font-weight: 600;
+	}
+
 	@media (prefers-color-scheme: dark) {
 		body {
 			background-color: #1f1f1f;
@@ -232,6 +244,7 @@
 <body>
 
 <a class="logo" href="/">modbot.dev</a>
+<a class="memory-link" href="/chat/memories">記憶</a>
 <div class="container">
 	<div class="chat-list" id="chatList"></div>
 </div>

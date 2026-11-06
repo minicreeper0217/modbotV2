@@ -318,6 +318,11 @@ class APP(commands.Cog):
 					case ["log", log_type]:
 						return await self.log(request, log_type)
 					case ["chat", chatid]:
+						if chatid == "memories":
+							if request.method == "GET":
+								return self.chat_memories_get(request)
+							if request.method == "POST":
+								return self.chat_memories_post(request)
 						return await self.chat_post(request, chatid)
 					case ["chatlog", chatid]:
 						return await self.chat_log(request, chatid)
@@ -989,14 +994,16 @@ class APP(commands.Cog):
 		if not await self.site_verify(request):
 			return web.Response(status=401, text="")
 		chatid = request.match_info['chatid']
-		cursor = self.chatgptdb.execute('SELECT name, uuid FROM list WHERE id = ?', (chatid,)).fetchone()
-		if cursor is None or not os.path.isdir(os.path.join(config.dir, 'data', 'chatgpt', chatid)):
-			return web.Response(status=404, text="")
 		nonce = uuid.uuid4().hex
 		headers = {
 			'Content-Type': 'text/html',
 			'Content-Security-Policy': f"script-src 'self' 'nonce-{nonce}'"
 		}
+		if chatid == "memories":
+			return web.Response(status=200,text=aiohttp_jinja2.render_string("memories.html", request, {"nonce": nonce}), headers=headers)
+		cursor = self.chatgptdb.execute('SELECT name, uuid FROM list WHERE id = ?', (chatid,)).fetchone()
+		if cursor is None or not os.path.isdir(os.path.join(config.dir, 'data', 'chatgpt', chatid)):
+			return web.Response(status=404, text="")
 		return web.Response(status=200,text=aiohttp_jinja2.render_string("chat.html", request, {"nonce": nonce}), headers=headers)
 
 	async def chat_op(self, request:web.Request, chatid:str):
@@ -1211,6 +1218,54 @@ class APP(commands.Cog):
 				"Cache-Control": "private, no-store"
 			}
 		)
+
+	async def chat_memories_get(self, request:web.Request):
+		base_path = config.dir / "data" / "chatgpt" / "memories"
+		if (base_path / "c1.json").is_file():
+			with open(base_path / "c1.json", "r") as f:
+				c1 = json.load(f)
+		else:
+			c1 = []
+
+		if (base_path / "c2.json").is_file():
+			with open(base_path / "c2.json", "r") as f:
+				c2 = json.load(f)
+		else:
+			c2 = []
+
+		data = {
+			"c1":{
+				"v": hashlib.sha256(bytes(json.dumps(c1), "UTF-8")).hexdigest(),
+				"d": c1
+			},
+			"c2":{
+				"v": hashlib.sha256(bytes(json.dumps(c2), "UTF-8")).hexdigest(),
+				"d": c2
+			}
+		}
+		return web.Response(status=200, text=json.dumps(data), content_type="application/json")
+
+	async def chat_memories_post(self, request:web.Request):
+		chat_type = request.query.get("type")
+		if not chat_type or chat_type not in ["c1", "c2"]:
+			return web.Response(status=404, text="")
+
+		raw = await request.json()
+		version = raw.get("v")
+		new_data = raw.get("d")
+		
+		base_path = config.dir / "data" / "chatgpt" / "memories"
+		with open(base_path / f"{chat_type}.json", "r+") as f:
+			old_data = f.read()
+			old_hash = hashlib.sha256(bytes(old_data, "UTF-8")).hexdigest()
+			if old_hash != version:
+				return web.Response(status=409, text="")
+
+			f.seek(0)
+			json.dump(new_data, f, ensure_ascii=False, indent=2)
+			f.truncate()
+
+			return web.Response(status=200, text='{"success": true}', content_type="application/json")
 
 	@routes.route(path="/subscription/{path:.*}", method="GET")
 	async def subscription(self, request:web.Request):
