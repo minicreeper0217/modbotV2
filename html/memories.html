@@ -21,9 +21,9 @@
       font-family: 'Microsoft JhengHei', system-ui, sans-serif; line-height: 1.6; }
     button, textarea { font: inherit; }
     button:disabled { opacity: .55; cursor: not-allowed !important; }
+    :where(button, a, textarea, input):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     #tab-c1 { background: #DCFCE7; color: #16A34A; }
     #tab-c2 { background: #EDE9FE; color: #8B5CF6; }
-    :where(button, a, textarea, input):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .page-header { width: 100%; min-height: 72px;
       padding: 14px max(20px, calc((100vw - 960px) / 2));
       display: flex; align-items: center; justify-content: space-between; gap: 16px;
@@ -38,7 +38,9 @@
     .tabs { display: flex; gap: 8px; }
     .tab, .add-button { min-height: 40px; padding: 7px 16px; border: 1px solid var(--border);
       border-radius: 8px; background: var(--surface); color: var(--text); cursor: pointer; font-weight: 650; }
-    .tab:hover:not(:disabled), .add-button:hover:not(:disabled) { background: var(--surface-hover); }
+    .tab:hover:not(:disabled), .add-button:hover:not(:disabled), .edit-button:hover:not(:disabled) {
+      background: var(--surface-hover);
+    }
     .tab[aria-selected="true"] { color: var(--accent); border-color: var(--accent);
       background: var(--accent-soft); }
     .summary { color: var(--muted); font-size: 14px; margin: 0 0 14px; }
@@ -49,16 +51,23 @@
     .memory-card { min-width: 0; padding: 18px 20px; background: var(--surface);
       border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); }
     .memory-card.unselected { opacity: .65; }
-    .memory-head { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
-    .memory-check { width: 18px; height: 18px; flex: none; margin: 4px 0 0;
+    .memory-card.editing { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+    .memory-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+    .memory-check { width: 18px; height: 18px; flex: none; margin: 6px 0 0;
       accent-color: var(--accent); cursor: pointer; }
-    .memory-identity { min-width: 0; }
+    .memory-identity { min-width: 0; flex: 1; }
     .memory-title { font-weight: 700; }
     .memory-uuid { display: block; color: var(--muted); font-size: 12px;
       font-family: ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
-    .memory-content { display: block; width: 100%; min-height: 104px; max-height: 50vh;
-      padding: 10px 12px; resize: vertical; background: var(--surface); color: var(--text);
-      border: 1px solid var(--border); border-radius: 8px; font-size: 16px; }
+    .edit-button { flex: none; min-height: 36px; padding: 5px 12px;
+      border: 1px solid var(--border); border-radius: 8px;
+      background: var(--surface-soft); color: var(--text); cursor: pointer; font-weight: 600; }
+    .memory-content { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
+    .memory-content:empty::before { content: '（內容為空，請按編輯）'; color: var(--muted); }
+    .edit-textarea { display: block; width: 100%; min-height: 100px; height: auto;
+      padding: 10px 12px; resize: none; overflow: hidden;
+      background: var(--surface); color: var(--text);
+      border: 1px solid var(--border); border-radius: 8px; font-size: 16px; line-height: 1.7; }
     .empty { padding: 28px 20px; text-align: center; background: var(--surface);
       border: 1px dashed var(--border); border-radius: 14px; color: var(--muted); }
     @media (prefers-color-scheme: dark) {
@@ -77,6 +86,7 @@
       .action-button, .tab, .add-button { min-height: 44px; }
       .container { width: calc(100% - 24px); margin: 16px auto 40px; }
       .memory-card { padding: 16px; }
+      .edit-button { min-height: 44px; }
     }
   </style>
 </head>
@@ -134,7 +144,7 @@
           ids.add(item.uuid);
           return { uuid: item.uuid, content: item.content, selected: true };
         });
-        parsed[type] = { v: part.v, items, baseline: JSON.stringify(part.d) };
+        parsed[type] = { v: part.v, items, baseline: JSON.stringify(part.d), editingUuid: null };
       }
       return parsed;
     }
@@ -175,13 +185,19 @@
       submitBtn.disabled = value || !drafts[active];
       addBtn.disabled = value || !drafts[active];
       tabs.forEach(tab => { tab.disabled = value || !drafts[tab.dataset.type]; });
-      list.querySelectorAll('input, textarea').forEach(control => { control.disabled = value; });
+      list.querySelectorAll('input, textarea, button').forEach(control => { control.disabled = value; });
+    }
+
+    function resizeTextarea(textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = textarea.scrollHeight + 2 + 'px';
     }
 
     function render() {
       list.replaceChildren();
       if (!drafts[active]) return;
-      const items = drafts[active].items;
+      const draft = drafts[active];
+      const items = draft.items;
       list.setAttribute('aria-label', `${active.toUpperCase()} 記憶`);
       tabs.forEach(tab => tab.setAttribute('aria-selected', String(tab.dataset.type === active)));
       updateSummary();
@@ -193,8 +209,10 @@
         return;
       }
       items.forEach((item, index) => {
+        const editing = draft.editingUuid === item.uuid;
         const card = document.createElement('article');
-        card.className = 'memory-card' + (item.selected ? '' : ' unselected');
+        card.className = 'memory-card' + (item.selected ? '' : ' unselected') +
+          (editing ? ' editing' : '');
         const head = document.createElement('div');
         head.className = 'memory-head';
         const check = document.createElement('input');
@@ -202,7 +220,6 @@
         check.className = 'memory-check';
         check.checked = item.selected;
         check.disabled = busy;
-        const contentId = `memory-${index}`;
         check.setAttribute('aria-label', `保留記憶 ${item.uuid}`);
         check.addEventListener('change', () => {
           item.selected = check.checked;
@@ -211,26 +228,49 @@
         });
         const identity = document.createElement('div');
         identity.className = 'memory-identity';
-        const title = document.createElement('label');
+        const title = document.createElement('div');
         title.className = 'memory-title';
-        title.htmlFor = contentId;
         title.textContent = `記憶 #${index + 1}`;
         const uuid = document.createElement('span');
         uuid.className = 'memory-uuid';
         uuid.textContent = `UUID：${item.uuid}`;
         identity.append(title, uuid);
-        head.append(check, identity);
-        const textarea = document.createElement('textarea');
-        textarea.id = contentId;
-        textarea.className = 'memory-content';
-        textarea.value = item.content;
-        textarea.disabled = busy;
-        textarea.addEventListener('input', () => {
-          item.content = textarea.value;
-          updateSummary();
+        const editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'edit-button';
+        editBtn.textContent = editing ? '完成編輯' : '編輯';
+        editBtn.disabled = busy;
+        editBtn.setAttribute('aria-label', `${editing ? '完成編輯' : '編輯'}記憶 ${item.uuid}`);
+        editBtn.addEventListener('click', () => {
+          if (busy) return;
+          draft.editingUuid = editing ? null : item.uuid;
+          render();
+          if (!editing) list.querySelector('.memory-card.editing textarea')?.focus();
         });
-        card.append(head, textarea);
-        list.appendChild(card);
+        head.append(check, identity, editBtn);
+        card.appendChild(head);
+        if (editing) {
+          const textarea = document.createElement('textarea');
+          textarea.className = 'edit-textarea';
+          textarea.setAttribute('aria-label', `記憶 ${item.uuid} 的內容`);
+          textarea.value = item.content;
+          textarea.disabled = busy;
+          textarea.addEventListener('input', () => {
+            item.content = textarea.value;
+            resizeTextarea(textarea);
+            updateSummary();
+          });
+          card.appendChild(textarea);
+          // 元素進入文件後才能正確量出 scrollHeight。
+          list.appendChild(card);
+          requestAnimationFrame(() => resizeTextarea(textarea));
+        } else {
+          const content = document.createElement('div');
+          content.className = 'memory-content';
+          content.textContent = item.content;
+          card.appendChild(content);
+          list.appendChild(card);
+        }
       });
     }
 
@@ -251,10 +291,11 @@
       do { uuid = crypto.randomUUID().replaceAll('-', ''); }
       while (drafts[active].items.some(item => item.uuid === uuid));
       drafts[active].items.push({ uuid, content: '', selected: true });
+      drafts[active].editingUuid = uuid;
       render();
-      const last = list.querySelector('.memory-card:last-child textarea');
-      last?.focus();
-      last?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const editor = list.querySelector('.memory-card.editing textarea');
+      editor?.focus();
+      editor?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
 
     submitBtn.addEventListener('click', async () => {
@@ -293,11 +334,16 @@
           return;
         }
         if (!response.ok) throw new Error(`送出失敗（HTTP ${response.status}）`);
-        // 不假設 POST 的回應格式；重新 GET 取得伺服器認定的最新版本。
-        const latest = await fetchMemories();
-        drafts[type] = latest[type];
-        render();
-        setStatus(`${type.toUpperCase()} 記憶已送出。`, 'success');
+        // POST 可能回傳 204；以 GET 取得伺服器認定的新版本。
+        try {
+          const latest = await fetchMemories();
+          drafts[type] = latest[type];
+          render();
+          setStatus(`${type.toUpperCase()} 記憶已送出。`, 'success');
+        } catch {
+          setStatus('送出已成功，但無法重新取得版本；請重新整理頁面後再編輯。', 'error');
+          submitBtn.disabled = true;
+        }
       } catch (error) {
         setStatus(error instanceof Error ? error.message : '發生未知錯誤', 'error');
       } finally {
