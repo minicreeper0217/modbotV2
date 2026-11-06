@@ -8,6 +8,7 @@
   <link rel="icon" type="image/x-icon" href="/favicon/favicon.ico">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon/favicon-16x16.png">
+  <script src="https://cdn.jsdelivr.net/npm/markdown-it@15.0.3/dist/browser/markdown-it.umd.min.js" nonce="{{ nonce }}"></script>
   <style>
     :root {
       color-scheme: light dark;
@@ -62,7 +63,20 @@
     .edit-button { flex: none; min-height: 36px; padding: 5px 12px;
       border: 1px solid var(--border); border-radius: 8px;
       background: var(--surface-soft); color: var(--text); cursor: pointer; font-weight: 600; }
-    .memory-content { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
+    .memory-content {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      line-height: 1.7;
+    }
+    .memory-content > :first-child { margin-top: 0; }
+    .memory-content > :last-child { margin-bottom: 0; }
+    .memory-content pre {
+      max-width: 100%;
+      overflow-x: auto;
+      padding: 12px;
+      border-radius: 8px;
+      background: var(--surface-soft);
+    }
     .memory-content:empty::before { content: '（內容為空，請按編輯）'; color: var(--muted); }
     .edit-textarea { display: block; width: 100%; min-height: 100px; height: auto;
       padding: 10px 12px; resize: none; overflow: hidden;
@@ -111,6 +125,11 @@
   </main>
   <script nonce="{{ nonce }}">
     'use strict';
+    const md = window.markdownit({
+      html: false,
+      breaks: true,
+      linkify: true
+    });
     const TYPES = ['c1', 'c2'];
     const TAB_LABELS = { c1: '日常', c2: '女孩' };
     const tabs = [...document.querySelectorAll('.tab')];
@@ -268,9 +287,8 @@
         } else {
           const content = document.createElement('div');
           content.className = 'memory-content';
-          content.textContent = item.content;
+          content.innerHTML = md.render(item.content);
           card.appendChild(content);
-          list.appendChild(card);
         }
       });
     }
