@@ -689,7 +689,7 @@ class ChatGPT(commands.Cog):
 			]
 			memories.extend(added)
 			self._write_json(path, memories)
-			return added
+			return {"success": True}
 
 	async def edit_memory(self, chat_type: str, edits: list[dict]) -> list[dict]:
 		path = self._memory_path(chat_type)  # 同時驗證只能是 c1／c2
@@ -729,8 +729,7 @@ class ChatGPT(commands.Cog):
 						updated.append(memory.copy())
 
 				self._write_json(path, memories)
-				return updated
-
+				return {"success": True}
 
 	def sync_deleted_outputs(self, chatid, deleted_ids: set[str]):
 		if not deleted_ids:
