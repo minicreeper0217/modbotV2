@@ -146,11 +146,6 @@ class GPTres:
 		self.first_token = asyncio.Event()
 		self._send_lock = asyncio.Lock()
 		self._last_sent = ""
-		self._memory_locks = {
-			"c1": asyncio.Lock(),
-			"c2": asyncio.Lock(),
-		}
-
 
 		if user_msg:
 			self.user_msg = user_msg
@@ -318,6 +313,10 @@ class ChatGPT(commands.Cog):
 		self.chatgptchannel = config.chatgpt_channel
 		self.github = GitHub(token=config.github_token)
 		self._chat_locks = {}
+		self._memory_locks = {
+			"c1": asyncio.Lock(),
+			"c2": asyncio.Lock(),
+		}
 		self.chatgptdb = sqlite3.connect(
 			os.path.join(config.dir, "database", "chatgpt.db"), isolation_level=None
 		)
