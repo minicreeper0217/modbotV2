@@ -112,6 +112,7 @@
   <script nonce="{{ nonce }}">
     'use strict';
     const TYPES = ['c1', 'c2'];
+    const TAB_LABELS = { c1: '日常', c2: '女孩' };
     const tabs = [...document.querySelectorAll('.tab')];
     const submitBtn = document.getElementById('submitBtn');
     const addBtn = document.getElementById('addBtn');
@@ -176,7 +177,7 @@
         (isDirty(active) ? ' · 尚未送出' : ' · 已同步');
       for (const tab of tabs) {
         const type = tab.dataset.type;
-        tab.textContent = type.toUpperCase() + (isDirty(type) ? ' *' : '');
+        tab.textContent = TAB_LABELS[type] + (isDirty(type) ? ' *' : '');
       }
     }
 
@@ -233,7 +234,7 @@
         title.textContent = `記憶 #${index + 1}`;
         const uuid = document.createElement('span');
         uuid.className = 'memory-uuid';
-        uuid.textContent = `UUID：${item.uuid}`;
+        uuid.textContent = `${item.uuid}`;
         identity.append(title, uuid);
         const editBtn = document.createElement('button');
         editBtn.type = 'button';
