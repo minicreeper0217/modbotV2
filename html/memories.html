@@ -353,12 +353,6 @@
         });
         if (response.status === 409) {
           setStatus('版本衝突：記憶已被其他操作更新，草稿未送出。', 'error');
-          if (window.confirm('記憶已更新。要重新載入目前類型嗎？這會捨棄目前類型尚未送出的修改。')) {
-            const latest = await fetchMemories();
-            drafts[type] = latest[type];
-            render();
-            setStatus('已載入最新記憶；另一類型的草稿未更動。');
-          }
           return;
         }
         if (!response.ok) throw new Error(`送出失敗（HTTP ${response.status}）`);
