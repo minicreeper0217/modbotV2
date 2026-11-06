@@ -320,9 +320,9 @@ class APP(commands.Cog):
 					case ["chat", chatid]:
 						if chatid == "memories":
 							if request.method == "GET":
-								return self.chat_memories_get(request)
+								return await self.chat_memories_get(request)
 							if request.method == "POST":
-								return self.chat_memories_post(request)
+								return await self.chat_memories_post(request)
 						return await self.chat_post(request, chatid)
 					case ["chatlog", chatid]:
 						return await self.chat_log(request, chatid)
