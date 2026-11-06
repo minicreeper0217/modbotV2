@@ -1223,23 +1223,25 @@ class APP(commands.Cog):
 		base_path = config.dir / "data" / "chatgpt" / "memories"
 		if (base_path / "c1.json").is_file():
 			with open(base_path / "c1.json", "r") as f:
-				c1 = json.load(f)
+				raw_c1 = f.read()
+				c1 = json.loads(raw_c1)
 		else:
 			c1 = []
 
 		if (base_path / "c2.json").is_file():
 			with open(base_path / "c2.json", "r") as f:
-				c2 = json.load(f)
+				raw_c2 = f.read()
+				c2 = json.loads(raw_c2)
 		else:
 			c2 = []
 
 		data = {
 			"c1":{
-				"v": hashlib.sha256(bytes(json.dumps(c1), "UTF-8")).hexdigest(),
+				"v": hashlib.sha256(bytes(raw_c1, "UTF-8")).hexdigest(),
 				"d": c1
 			},
 			"c2":{
-				"v": hashlib.sha256(bytes(json.dumps(c2), "UTF-8")).hexdigest(),
+				"v": hashlib.sha256(bytes(raw_c2, "UTF-8")).hexdigest(),
 				"d": c2
 			}
 		}
