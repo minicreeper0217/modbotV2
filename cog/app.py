@@ -875,8 +875,11 @@ class APP(commands.Cog):
 			except KeyError:
 				return web.Response(status=401, text="")
 			state = hmac.new(bytes(config.web_secret, "UTF-8"), bytes(state_hmac, "UTF-8"), hashlib.sha256).hexdigest()
-			self.webappdb.execute('INSERT INTO state VALUES (?, ?, ?, ?, ?, ?)', (state, request.headers.get('X-Real-IP'), request.headers.get('User-Agent'), int(datetime.datetime.now().timestamp() + 1800), 0, state_uuid))
-			self.webappdb.commit()
+			try:
+				self.webappdb.execute('INSERT INTO state VALUES (?, ?, ?, ?, ?, ?)', (state, request.headers.get('X-Real-IP'), request.headers.get('User-Agent'), int(datetime.datetime.now().timestamp() + 1800), 0, state_uuid))
+				self.webappdb.commit()
+			except sqlite3.IntegrityError:
+				return web.Response(status=409, text="")
 			data = {
 				"url": f"https://discord.com/oauth2/authorize?response_type=code&client_id={config.applications_id}&scope=identify&state={state}"
 			}
