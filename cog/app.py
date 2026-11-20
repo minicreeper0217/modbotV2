@@ -610,7 +610,7 @@ class APP(commands.Cog):
 				"icon": "❌",
 				"title": "Authentication Canceled",
 				"description": "Sorry, You must login from discord to enter this site" 
-			}, status=403)
+			}, status=200)
 		if not code or not state:
 			return web.Response(status=400, text='')
 		state_data = self.webappdb.execute('SELECT * FROM state WHERE id = ?', (state,)).fetchone()
@@ -619,14 +619,14 @@ class APP(commands.Cog):
 				"icon": "❌",
 				"title": "Invaild State",
 				"description": "Sorry, Please try again later." 
-			}, status=400)
+			}, status=200)
 		state, userip, useragant, expire, is_used, state_uuid = state_data
 		if is_used:
 			return aiohttp_jinja2.render_template("4xx.html", request=request, context={
 				"icon": "❌",
 				"title": "State Expired",
 				"description": "Sorry, Please try again later." 
-			}, status=400)
+			}, status=200)
 		self.webappdb.execute('UPDATE state SET is_used = ? WHERE id = ?', (1,state))
 		self.webappdb.commit()
 		now = int(datetime.datetime.now().timestamp())
@@ -637,7 +637,7 @@ class APP(commands.Cog):
 				"icon": "❌",
 				"title": "State Expired",
 				"description": "Sorry, Please try again later." 
-			}, status=400)
+			}, status=200)
 		data = {
 			'grant_type': 'authorization_code',
 			'code': code,
@@ -665,7 +665,7 @@ class APP(commands.Cog):
 							"icon": "🚧",
 							"title": "Nice Try!",
 							"description": "Sorry, You don't have permission to enter this site." 
-						}, status=403)
+						}, status=200)
 					session_id = str(uuid.uuid4()).replace("-", "")
 					jwt = self.jwt_create(scope='app.access.token', exp_offset=619200, jti=session_id)
 					rjwt = self.jwt_create(scope="app.refresh.token", exp_offset=2592000, jti=session_id)
