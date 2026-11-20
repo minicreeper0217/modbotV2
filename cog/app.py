@@ -606,22 +606,38 @@ class APP(commands.Cog):
 		code = request.query.get('code')
 		state = request.query.get('state')
 		if request.query.get('error') == 'access_denied':
-			return web.Response(status=403, text='Sorry, You must login from discord to enter this site')
+			return aiohttp_jinja2.render_template("4xx.html", request=request, context={
+				"icon": "❌",
+				"title": "Authentication Canceled",
+				"description": "Sorry, You must login from discord to enter this site" 
+			}, status=403)
 		if not code or not state:
 			return web.Response(status=400, text='')
 		state_data = self.webappdb.execute('SELECT * FROM state WHERE id = ?', (state,)).fetchone()
 		if state_data is None:
-			return web.Response(status=400, text='')
+			return aiohttp_jinja2.render_template("4xx.html", request=request, context={
+				"icon": "❌",
+				"title": "Invaild State",
+				"description": "Sorry, Please try again later." 
+			}, status=400)
 		state, userip, useragant, expire, is_used, state_uuid = state_data
 		if is_used:
-			return web.Response(status=403, text='')
+			return aiohttp_jinja2.render_template("4xx.html", request=request, context={
+				"icon": "❌",
+				"title": "State Expired",
+				"description": "Sorry, Please try again later." 
+			}, status=400)
 		self.webappdb.execute('UPDATE state SET is_used = ? WHERE id = ?', (1,state))
 		self.webappdb.commit()
 		now = int(datetime.datetime.now().timestamp())
 		if userip != request.headers.get('X-Real-IP') or useragant != request.headers.get('User-Agent'):
 			return web.Response(status=400, text='')
 		if datetime.datetime.now().timestamp() > expire:
-			return web.Response(status=408, text='')
+			return aiohttp_jinja2.render_template("4xx.html", request=request, context={
+				"icon": "❌",
+				"title": "State Expired",
+				"description": "Sorry, Please try again later." 
+			}, status=400)
 		data = {
 			'grant_type': 'authorization_code',
 			'code': code,
@@ -645,7 +661,11 @@ class APP(commands.Cog):
 					userid = d['id']
 					if userid != str(config.ownerid):
 						logging.warning(f"A unknown user want login from Discord\n{d}")
-						return web.Response(status=403, text="Sorry, You don't have permission to enter this site")
+						return aiohttp_jinja2.render_template("4xx.html", request=request, context={
+							"icon": "🚧",
+							"title": "Nice Try!",
+							"description": "Sorry, You don't have permission to enter this site." 
+						}, status=403)
 					session_id = str(uuid.uuid4()).replace("-", "")
 					jwt = self.jwt_create(scope='app.access.token', exp_offset=619200, jti=session_id)
 					rjwt = self.jwt_create(scope="app.refresh.token", exp_offset=2592000, jti=session_id)
