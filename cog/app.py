@@ -617,16 +617,16 @@ class APP(commands.Cog):
 		if state_data is None:
 			return aiohttp_jinja2.render_template("4xx.html", request=request, context={
 				"icon": "❌",
-				"title": "Invaild State",
+				"title": "Invalid State",
 				"description": "Sorry, Please try again later." 
 			}, status=400)
 		state, userip, useragant, expire, is_used, state_uuid = state_data
 		if is_used:
 			return aiohttp_jinja2.render_template("4xx.html", request=request, context={
 				"icon": "❌",
-				"title": "State Expired",
+				"title": "State Already Used",
 				"description": "Sorry, Please try again later." 
-			}, status=400)
+			}, status=403)
 		self.webappdb.execute('UPDATE state SET is_used = ? WHERE id = ?', (1,state))
 		self.webappdb.commit()
 		now = int(datetime.datetime.now().timestamp())
@@ -637,7 +637,7 @@ class APP(commands.Cog):
 				"icon": "❌",
 				"title": "State Expired",
 				"description": "Sorry, Please try again later." 
-			}, status=400)
+			}, status=410)
 		data = {
 			'grant_type': 'authorization_code',
 			'code': code,
