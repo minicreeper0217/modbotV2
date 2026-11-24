@@ -670,6 +670,9 @@ class ChatGPT(commands.Cog):
 			):
 				raise ValueError(f"記憶檔格式錯誤：{path}")
 
+			for memory in memories:
+				memory.setdefault("updated_at", None)
+
 			return memories
 
 	async def add_memory(self, chat_type: str, contents: list[str]) -> list[dict]:
@@ -683,8 +686,9 @@ class ChatGPT(commands.Cog):
 
 		async with self._memory_locks[chat_type]:
 			memories = self.read_memories(chat_type)
+			timestamp = datetime.now(tz).isoformat(timespec="seconds")
 			added = [
-				{"uuid": uuid.uuid4().hex, "content": content.strip()}
+				{"uuid": uuid.uuid4().hex, "content": content.strip(), "updated_at": timestamp}
 				for content in contents
 			]
 			memories.extend(added)
@@ -723,10 +727,16 @@ class ChatGPT(commands.Cog):
 					raise ValueError(f"找不到記憶 UUID：{', '.join(sorted(missing))}")
 
 				updated = []
+				timestamp = datetime.now(tz).isoformat(timespec="seconds")
+
 				for memory in memories:
 					if memory["uuid"] in requested:
-						memory["content"] = requested[memory["uuid"]]
-						updated.append(memory.copy())
+						new_content = requested[memory["uuid"]]
+
+						if memory["content"] != new_content:
+							memory["content"] = new_content
+							memory["updated_at"] = timestamp
+							updated.append(memory.copy())
 
 				self._write_json(path, memories)
 				return {"success": True}

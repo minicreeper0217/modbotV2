@@ -170,7 +170,12 @@
             throw new Error(`${type.toUpperCase()} 記憶項目格式錯誤`);
           }
           ids.add(item.uuid);
-          return { uuid: item.uuid, content: item.content, selected: true };
+          return {
+            uuid: item.uuid,
+            content: item.content,
+            updated_at: item.updated_at ?? null,
+            selected: true
+          };
         });
         parsed[type] = { v: part.v, items, baseline: JSON.stringify(part.d), editingUuid: null };
       }
@@ -187,7 +192,11 @@
 
     function selectedItems(type) {
       return drafts[type].items.filter(item => item.selected)
-        .map(item => ({ uuid: item.uuid, content: item.content }));
+          .map(item => ({
+              uuid: item.uuid,
+              content: item.content,
+              updated_at: item.updated_at
+          }));
     }
 
     function isDirty(type) {
@@ -298,6 +307,19 @@
           content.innerHTML = md.render(item.content);
           card.appendChild(content);
           list.appendChild(card);
+          if (item.updated_at !== null) {
+            const updated = document.createElement('small');
+            updated.className = 'memory-updated';
+            updated.textContent = `更新時間：${new Date(item.updated_at).toLocaleString('zh-TW', {
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+              hourCycle: 'h23'
+            })}`;
+            card.appendChild(updated);
+          }
         }
       });
     }
